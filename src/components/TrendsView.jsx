@@ -7,8 +7,12 @@ import {
 
 export default function TrendsView() {
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState('exercises'); // 'exercises', 'bodyweight', 'measurements'
+  const [mode, setMode] = useState('exercises'); 
   
+  // --- SETTINGS STATE ---
+  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+  const [measureUnit, setMeasureUnit] = useState('in'); // Default lowercase
+
   // --- STATE: EXERCISES ---
   const [exercises, setExercises] = useState([]);
   const [selectedExId, setSelectedExId] = useState('');
@@ -30,6 +34,15 @@ export default function TrendsView() {
 
   useEffect(() => {
     loadAllData();
+
+    // Load Settings (Force lowercase)
+    const loadSettings = () => {
+        setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
+        setMeasureUnit((localStorage.getItem('onyx_unit_measure') || 'in').toLowerCase());
+    };
+    loadSettings();
+    window.addEventListener('storage', loadSettings);
+    return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
   useEffect(() => {
@@ -161,7 +174,6 @@ export default function TrendsView() {
 
   if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Trends...</div>;
 
-  // FIXED: w-full overflow-x-hidden
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
@@ -188,7 +200,8 @@ export default function TrendsView() {
              {[...exerciseData].reverse().map((entry, idx) => (
                <div key={idx} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                  <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
-                 <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">lbs</span></span>
+                 {/* UPDATED: Lowercase Unit */}
+                 <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
                </div>
              ))}
           </div>
@@ -205,7 +218,8 @@ export default function TrendsView() {
               </div>
               <div className="flex-1">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Weight</label>
-                <input type="number" value={inputWeight} onChange={(e) => setInputWeight(e.target.value)} placeholder="lbs" className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
+                {/* UPDATED: Lowercase Placeholder */}
+                <input type="number" value={inputWeight} onChange={(e) => setInputWeight(e.target.value)} placeholder={weightUnit.toLowerCase()} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
               <button onClick={handleSaveWeight} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
             </div>
@@ -217,7 +231,8 @@ export default function TrendsView() {
               <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">lbs</span></span>
+                  {/* UPDATED: Lowercase Unit */}
+                  <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
                   <button onClick={() => handleDeleteWeight(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
                 </div>
               </div>
@@ -231,19 +246,19 @@ export default function TrendsView() {
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
             <div className="mb-3">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Body Part</label>
-                {/* FIXED: Added w-full */}
                 <select value={bodyPart} onChange={(e) => setBodyPart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
                     {BODY_PARTS.map(part => <option key={part} value={part}>{part}</option>)}
                 </select>
             </div>
             <div className="flex gap-2 items-end">
-              <div className="flex-1 min-w-0"> {/* FIXED: min-w-0 */}
+              <div className="flex-1 min-w-0">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Date</label>
                 <input type="date" value={measureDate} onChange={(e) => setMeasureDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
-              <div className="flex-1 min-w-0"> {/* FIXED: min-w-0 */}
+              <div className="flex-1 min-w-0">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Value</label>
-                <input type="number" value={inputMeasurement} onChange={(e) => setInputMeasurement(e.target.value)} placeholder="in/cm" className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
+                {/* UPDATED: Lowercase Placeholder */}
+                <input type="number" value={inputMeasurement} onChange={(e) => setInputMeasurement(e.target.value)} placeholder={measureUnit.toLowerCase()} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
               <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
             </div>
@@ -257,7 +272,8 @@ export default function TrendsView() {
               <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-white">{entry.measurement}</span>
+                  {/* UPDATED: Lowercase Unit */}
+                  <span className="font-bold text-white">{entry.measurement} <span className="text-xs text-zinc-600 font-normal">{measureUnit.toLowerCase()}</span></span>
                   <button onClick={() => handleDeleteMeasurement(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
                 </div>
               </div>

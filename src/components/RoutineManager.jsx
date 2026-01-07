@@ -5,7 +5,7 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 const CATEGORIES = ['Push', 'Pull', 'Legs', 'Core', 'Other'];
 
-export default function RoutineManager() {
+export default function RoutineManager({ onBack }) { // Added prop
   const [loading, setLoading] = useState(true);
   const [routines, setRoutines] = useState([]);
   const [allExercises, setAllExercises] = useState([]);
@@ -32,7 +32,6 @@ export default function RoutineManager() {
         getExercises(),
         getRoutines()
     ]);
-    
     setAllExercises(loadedExercises);
     setRoutines(loadedRoutines);
     setLoading(false);
@@ -86,7 +85,6 @@ export default function RoutineManager() {
     const temp = newOrder[index];
     newOrder[index] = newOrder[index + direction];
     newOrder[index + direction] = temp;
-    
     setSelectedExercises(newOrder);
   };
 
@@ -201,9 +199,20 @@ export default function RoutineManager() {
 
   if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading...</div>;
 
-  // FIXED: w-full overflow-x-hidden
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
+      
+      {/* Back Button */}
+      <div className="mb-4">
+        <button 
+          onClick={onBack}
+          className="flex items-center gap-2 text-zinc-500 hover:text-white transition text-xs font-bold uppercase tracking-widest"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+          Back to Settings
+        </button>
+      </div>
+
       <h2 className="text-xl font-bold mb-4 text-gray-300">
         {editingId ? 'Edit Routine' : 'Routine Builder'}
       </h2>
@@ -230,7 +239,7 @@ export default function RoutineManager() {
           <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Routine Name</label>
           <input type="text" value={routineName} onChange={(e) => setRoutineName(e.target.value)} placeholder="e.g. Heavy Legs" className="w-full p-2 mb-4 rounded bg-black border border-zinc-700 text-white outline-none focus:border-white transition" />
 
-          {/* Cardio */}
+          {/* Cardio Section */}
           <div className="mb-6 p-3 bg-blue-900/10 border border-blue-900/30 rounded-lg">
             <label className="block text-xs text-blue-400 uppercase font-bold mb-2">Planned Cardio</label>
             {routineCardio.length > 0 && (
@@ -252,7 +261,7 @@ export default function RoutineManager() {
             </div>
           </div>
 
-          {/* --- SECTION 1: SELECTED EXERCISES --- */}
+          {/* Selected Exercises Section */}
           {selectedExercises.length > 0 && (
             <div className="mb-6">
                 <label className="text-xs text-blue-400 uppercase font-bold mb-2 block">Routine Order</label>
@@ -289,7 +298,7 @@ export default function RoutineManager() {
             </div>
           )}
 
-          {/* --- SECTION 2: EXERCISE LIBRARY --- */}
+          {/* Exercise Library Section */}
           <div className="flex justify-between items-end mb-2 pt-4 border-t border-zinc-800">
             <label className="text-xs text-gray-500 uppercase font-bold">Exercise Library</label>
             <button onClick={() => setShowNewExForm(!showNewExForm)} className="text-[10px] bg-zinc-800 text-blue-400 border border-blue-900/30 px-2 py-1 rounded hover:bg-zinc-700">

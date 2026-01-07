@@ -6,6 +6,10 @@ import {
 
 export default function HistoryView() {
   const [loading, setLoading] = useState(true);
+  
+  // --- SETTINGS STATE ---
+  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+
   const [combinedHistory, setCombinedHistory] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [exerciseMap, setExerciseMap] = useState({});
@@ -15,6 +19,14 @@ export default function HistoryView() {
 
   useEffect(() => {
     loadData();
+
+    // Load Settings (Force lowercase)
+    const loadSettings = () => {
+        setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
+    };
+    loadSettings();
+    window.addEventListener('storage', loadSettings);
+    return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
   const loadData = async () => {
@@ -113,7 +125,6 @@ export default function HistoryView() {
 
   if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading History...</div>;
 
-  // FIXED: w-full overflow-x-hidden
   return (
     <div className="w-full max-w-md mx-auto text-white pb-10 overflow-x-hidden">
       <div className="flex justify-between items-center mb-6 px-1">
@@ -167,7 +178,8 @@ export default function HistoryView() {
                 {(item.sets || []).map((set, idx) => (
                   <div key={idx} className="grid grid-cols-3 text-sm text-gray-300 py-1 border-b border-zinc-800/50 last:border-0">
                     <span className="text-zinc-500 text-xs mt-1">SET {idx + 1}</span>
-                    <span>{set.weight} <span className="text-xs text-zinc-600">lbs</span></span>
+                    {/* UPDATED: Lowercase Unit */}
+                    <span>{set.weight} <span className="text-xs text-zinc-600">{weightUnit.toLowerCase()}</span></span>
                     <span>{set.reps} <span className="text-xs text-zinc-600">reps</span></span>
                   </div>
                 ))}
@@ -190,7 +202,8 @@ export default function HistoryView() {
                     <label className="block text-xs text-gray-500 mb-1">Sets</label>
                     {editingLog.sets.map((set, index) => (
                         <div key={index} className="flex gap-2 items-center">
-                        <input type="number" value={set.weight} onChange={(e) => updateEditSet(index, 'weight', e.target.value)} className="w-20 bg-black border border-zinc-700 rounded p-2 text-white text-sm" placeholder="lbs" />
+                        {/* UPDATED: Lowercase Placeholder */}
+                        <input type="number" value={set.weight} onChange={(e) => updateEditSet(index, 'weight', e.target.value)} className="w-20 bg-black border border-zinc-700 rounded p-2 text-white text-sm" placeholder={weightUnit.toLowerCase()} />
                         <input type="number" value={set.reps} onChange={(e) => updateEditSet(index, 'reps', e.target.value)} className="w-16 bg-black border border-zinc-700 rounded p-2 text-white text-sm" placeholder="reps" />
                         <button onClick={() => removeEditSet(index)} className="text-red-500 text-xs px-2">✕</button>
                         </div>

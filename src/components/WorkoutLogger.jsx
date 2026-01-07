@@ -5,6 +5,9 @@ export default function WorkoutLogger() {
   const [mode, setMode] = useState('lifting');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // --- SETTINGS STATE ---
+  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -23,6 +26,14 @@ export default function WorkoutLogger() {
       if (loaded.length > 0) setExerciseId(loaded[0].id);
     };
     fetchEx();
+
+    // Load Settings (Force lowercase)
+    const loadSettings = () => {
+        setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
+    };
+    loadSettings();
+    window.addEventListener('storage', loadSettings);
+    return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
   const handleAddSet = () => {
@@ -72,7 +83,6 @@ export default function WorkoutLogger() {
     }
   };
 
-  // FIXED: w-full overflow-x-hidden
   return (
     <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
@@ -125,9 +135,10 @@ export default function WorkoutLogger() {
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
+                {/* UPDATED: Lowercase Placeholder */}
                 <input 
                   type="number" 
-                  placeholder="lbs" 
+                  placeholder={weightUnit.toLowerCase()} 
                   value={set.weight}
                   onChange={(e) => handleSetChange(index, 'weight', e.target.value)}
                   className="w-full bg-black border border-zinc-700 rounded p-2 text-white"

@@ -10,6 +10,10 @@ import ConfirmModal from './ConfirmModal';
 export default function DailyView() {
   const [loading, setLoading] = useState(true);
   
+  // --- SETTINGS STATE ---
+  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+  const [measureUnit, setMeasureUnit] = useState('in'); // Default lowercase
+  
   // --- MODAL STATE ---
   const [modalConfig, setModalConfig] = useState({
     isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
@@ -59,6 +63,18 @@ export default function DailyView() {
     const dateStr = now.toISOString().split('T')[0];
     setTodayDateStr(dateStr);
     loadView(now);
+
+    // Load and listen for unit changes (Force lowercase)
+    const loadUnits = () => {
+        const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
+        setWeightUnit(w.toLowerCase());
+        
+        const m = localStorage.getItem('onyx_unit_measure') || 'in';
+        setMeasureUnit(m.toLowerCase());
+    };
+    loadUnits();
+    window.addEventListener('storage', loadUnits);
+    return () => window.removeEventListener('storage', loadUnits);
   }, []);
 
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
@@ -157,7 +173,8 @@ export default function DailyView() {
             const bestSet = sets.reduce((prev, current) => 
               (Number(current.weight) > Number(prev.weight) ? current : prev)
             , sets[0]);
-            historyStats[ex.id] = `${bestSet.weight} lbs x ${bestSet.reps}`;
+            // UPDATED: Lowercase Unit
+            historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
           }
         }
       });
@@ -351,11 +368,9 @@ export default function DailyView() {
     return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Onyx...</div>;
   }
 
-  // NOTE: Added "overflow-x-hidden" and ensured max-width containment
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
-      {/* MOUNT MODAL */}
       <ConfirmModal 
         isOpen={modalConfig.isOpen}
         title={modalConfig.title}
@@ -413,14 +428,16 @@ export default function DailyView() {
           <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="bg-green-900/20 text-green-500 p-2 rounded-full"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg></div>
-              <div><span className="text-xs text-green-500 font-bold uppercase block">Morning Weight</span><span className="text-white font-bold">{viewWeight} lbs</span></div>
+              {/* UPDATED: Lowercase Unit */}
+              <div><span className="text-xs text-green-500 font-bold uppercase block">Morning Weight</span><span className="text-white font-bold">{viewWeight} {weightUnit.toLowerCase()}</span></div>
             </div>
           </div>
         ) : (
           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
             <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Morning Body Weight</label>
             <div className="flex gap-2">
-              <input type="number" placeholder="0.0" value={weightInput} onChange={(e) => setWeightInput(e.target.value)} className="flex-1 min-w-0 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+              {/* UPDATED: Lowercase Placeholder */}
+              <input type="number" placeholder={`0.0 ${weightUnit.toLowerCase()}`} value={weightInput} onChange={(e) => setWeightInput(e.target.value)} className="flex-1 min-w-0 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
               <button onClick={handleSaveWeight} className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Save</button>
             </div>
           </div>
@@ -436,7 +453,8 @@ export default function DailyView() {
                         </div>
                         <div>
                             <span className="text-xs text-green-500 font-bold uppercase block">{m.body_part}</span>
-                            <span className="text-white font-bold">{m.measurement}</span>
+                            {/* UPDATED: Lowercase Unit */}
+                            <span className="text-white font-bold">{m.measurement} <span className="text-[10px] text-zinc-500 font-normal">{measureUnit.toLowerCase()}</span></span>
                         </div>
                     </div>
                     <button onClick={() => handleDeleteMeasurement(m.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
@@ -446,11 +464,11 @@ export default function DailyView() {
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
                 <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
                 <div className="flex gap-2 w-full">
-                    {/* FIXED WIDTH CONSTRAINT: shrink flex basis */}
                     <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="flex-1 min-w-0 bg-black border border-zinc-700 rounded p-2 text-white text-xs outline-none">
                         {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
-                    <input type="number" placeholder="Value" value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="w-20 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+                    {/* UPDATED: Lowercase Placeholder */}
+                    <input type="number" placeholder={measureUnit.toLowerCase()} value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="w-20 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
                     <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-3 rounded text-xs hover:bg-gray-200 transition">Log</button>
                 </div>
             </div>
@@ -539,7 +557,7 @@ export default function DailyView() {
             return (
               <div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}>
-                  <div className="flex-1 min-w-0"> {/* Allow shrinking */}
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
                       {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
@@ -547,7 +565,6 @@ export default function DailyView() {
                     <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
                   </div>
                   
-                  {/* RIGHT SIDE CONTAINER */}
                   <div className="text-right flex flex-col items-end gap-2 ml-2 flex-shrink-0">
                     {!isComplete && (
                         <div className="flex gap-1 mb-1">
@@ -568,7 +585,8 @@ export default function DailyView() {
                 {showBody && (
                   <div className={isComplete ? "opacity-50" : ""}>
                     <div className="px-4 pb-4 space-y-3">
-                      <div className="flex text-[10px] text-gray-500 uppercase font-bold px-1"><div className="w-8 text-center">Set</div><div className="flex-1 text-center">Lbs</div><div className="flex-1 text-center">Reps</div></div>
+                      {/* UPDATED: Lowercase Header */}
+                      <div className="flex text-[10px] text-gray-500 uppercase font-bold px-1"><div className="w-8 text-center">Set</div><div className="flex-1 text-center">{weightUnit.toLowerCase()}</div><div className="flex-1 text-center">Reps</div></div>
                       {setInputs[ex.id]?.map((set, idx) => (
                         <div key={idx} className="flex gap-3 items-center">
                           <div className="w-8 text-center text-zinc-600 font-bold text-sm">{idx + 1}</div>
