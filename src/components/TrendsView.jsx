@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   getBodyWeights, addBodyWeight, deleteBodyWeight, 
-  getLogs, getExercises 
+  getLogs, getExercises,
+  getCircumferences, addCircumference, deleteCircumference // New imports
 } from '../dataManager';
 
 export default function TrendsView() {
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState('exercises'); // 'exercises' or 'bodyweight'
+  const [mode, setMode] = useState('exercises'); // 'exercises', 'bodyweight', 'measurements'
   
   // --- STATE: EXERCISES ---
   const [exercises, setExercises] = useState([]);
@@ -18,43 +19,59 @@ export default function TrendsView() {
   const [inputWeight, setInputWeight] = useState('');
   const [inputDate, setInputDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // --- STATE: MEASUREMENTS (NEW) ---
+  const [measurementData, setMeasurementData] = useState([]); // All data
+  const [filteredMeasurements, setFilteredMeasurements] = useState([]); // Selected body part data
+  const [bodyPart, setBodyPart] = useState('Waist');
+  const [inputMeasurement, setInputMeasurement] = useState('');
+  const [measureDate, setMeasureDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
+
   useEffect(() => {
     loadAllData();
   }, []);
 
+  // Update chart when mode or selection changes
   useEffect(() => {
     if (mode === 'exercises' && selectedExId) {
       calculateExerciseTrend(selectedExId);
     }
-  }, [mode, selectedExId]);
+    if (mode === 'measurements') {
+      filterMeasurements(bodyPart);
+    }
+  }, [mode, selectedExId, bodyPart, measurementData]);
 
   const loadAllData = async () => {
     setLoading(true);
-    // 1. Load Body Data
-    const bData = await getBodyWeights();
+    const [bData, allEx, logs, mData] = await Promise.all([
+      getBodyWeights(),
+      getExercises(),
+      getLogs(),
+      getCircumferences() // Fetch measurements
+    ]);
+
+    // Setup Body Weight
     bData.sort((a, b) => new Date(a.date) - new Date(b.date));
     setBodyData(bData);
 
-    // 2. Load Exercises
-    const allEx = await getExercises();
+    // Setup Exercises
     setExercises(allEx);
-    if (allEx.length > 0 && !selectedExId) {
-      setSelectedExId(allEx[0].id);
-    }
+    if (allEx.length > 0 && !selectedExId) setSelectedExId(allEx[0].id);
+
+    // Setup Measurements
+    setMeasurementData(mData);
+
     setLoading(false);
   };
 
   const calculateExerciseTrend = async (exId) => {
-    const allLogs = await getLogs(); // This could be optimized to not fetch all every time
-    // Filter for this exercise
+    const allLogs = await getLogs();
     const relevantLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(exId));
     
-    // Process into simple { date, weight } points
     const points = relevantLogs.map(log => {
       const sets = log.sets || [];
-      const maxWeight = sets.reduce((max, set) => {
-        return Math.max(max, parseFloat(set.weight) || 0);
-      }, 0);
+      const maxWeight = sets.reduce((max, set) => Math.max(max, parseFloat(set.weight) || 0), 0);
       return { id: log.id, date: log.date, weight: maxWeight };
     });
 
@@ -62,12 +79,38 @@ export default function TrendsView() {
     setExerciseData(points);
   };
 
+  // --- MEASUREMENT LOGIC ---
+  const filterMeasurements = (part) => {
+    const filtered = measurementData
+      .filter(m => m.body_part === part)
+      .map(m => ({ ...m, weight: m.measurement })) // Map 'measurement' to 'weight' so chart generic logic works
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    setFilteredMeasurements(filtered);
+  };
+
+  const handleSaveMeasurement = async () => {
+    if (!inputMeasurement) return;
+    await addCircumference(measureDate, bodyPart, inputMeasurement);
+    setInputMeasurement('');
+    
+    // Refresh
+    const mData = await getCircumferences();
+    setMeasurementData(mData);
+  };
+
+  const handleDeleteMeasurement = async (id) => {
+    if (confirm("Delete this measurement?")) {
+      await deleteCircumference(id);
+      const mData = await getCircumferences();
+      setMeasurementData(mData);
+    }
+  };
+
+  // --- BODY WEIGHT LOGIC ---
   const handleSaveWeight = async () => {
     if (!inputWeight) return;
     await addBodyWeight(inputWeight, inputDate);
     setInputWeight('');
-    
-    // Refresh
     const bData = await getBodyWeights();
     bData.sort((a, b) => new Date(a.date) - new Date(b.date));
     setBodyData(bData);
@@ -108,7 +151,7 @@ export default function TrendsView() {
     return (
       <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6 relative">
         <h3 className="text-xs text-zinc-500 font-bold uppercase mb-4">
-          Progress ({dataPoints.length} sessions)
+          Progress ({dataPoints.length} entries)
         </h3>
         <svg viewBox="0 0 100 50" className="w-full h-32 stroke-blue-400 stroke-2 fill-none overflow-visible">
           <polyline points={pathD} vectorEffect="non-scaling-stroke" />
@@ -136,14 +179,17 @@ export default function TrendsView() {
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase mb-4">Trends</h1>
         
+        {/* Toggle Bar */}
         <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-          <button onClick={() => setMode('exercises')} className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Lifts</button>
-          <button onClick={() => setMode('bodyweight')} className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'bodyweight' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Body Weight</button>
+          <button onClick={() => setMode('exercises')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded transition ${mode === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Lifts</button>
+          <button onClick={() => setMode('bodyweight')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded transition ${mode === 'bodyweight' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Weight</button>
+          <button onClick={() => setMode('measurements')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded transition ${mode === 'measurements' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Measure</button>
         </div>
       </div>
 
+      {/* --- EXERCISE MODE --- */}
       {mode === 'exercises' && (
-        <div>
+        <div className="animate-fade-in">
           <div className="mb-6">
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-2">Select Exercise</label>
             <select value={selectedExId} onChange={(e) => setSelectedExId(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-3 text-white outline-none">
@@ -165,8 +211,9 @@ export default function TrendsView() {
         </div>
       )}
 
+      {/* --- BODY WEIGHT MODE --- */}
       {mode === 'bodyweight' && (
-        <div>
+        <div className="animate-fade-in">
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
             <div className="flex gap-2 items-end">
               <div className="flex-1">
@@ -195,6 +242,51 @@ export default function TrendsView() {
           </div>
         </div>
       )}
+
+      {/* --- MEASUREMENTS MODE --- */}
+      {mode === 'measurements' && (
+        <div className="animate-fade-in">
+          {/* Input Form */}
+          <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
+            <div className="mb-3">
+                <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Body Part</label>
+                <select value={bodyPart} onChange={(e) => setBodyPart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
+                    {BODY_PARTS.map(part => <option key={part} value={part}>{part}</option>)}
+                </select>
+            </div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Date</label>
+                <input type="date" value={measureDate} onChange={(e) => setMeasureDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Value</label>
+                <input type="number" value={inputMeasurement} onChange={(e) => setInputMeasurement(e.target.value)} placeholder="in/cm" className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
+              </div>
+              <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
+            </div>
+          </div>
+
+          {/* Chart */}
+          {renderChart(filteredMeasurements)}
+
+          {/* History List */}
+          <div className="space-y-2">
+            <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">{bodyPart} History</h3>
+            {[...filteredMeasurements].reverse().map(entry => (
+              <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
+                <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
+                <div className="flex items-center gap-4">
+                  <span className="font-bold text-white">{entry.measurement}</span>
+                  <button onClick={() => handleDeleteMeasurement(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
+                </div>
+              </div>
+            ))}
+            {filteredMeasurements.length === 0 && <p className="text-zinc-600 text-sm italic">No records for {bodyPart}.</p>}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
