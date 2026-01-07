@@ -10,7 +10,6 @@ export default function RoutineManager() {
   const [routines, setRoutines] = useState([]);
   const [allExercises, setAllExercises] = useState([]);
   
-  // Form State
   const [selectedDay, setSelectedDay] = useState(DAYS[0]);
   const [routineName, setRoutineName] = useState('');
   const [selectedExercises, setSelectedExercises] = useState([]); 
@@ -19,7 +18,6 @@ export default function RoutineManager() {
   const [cardioInput, setCardioInput] = useState({ type: 'Run', duration: '', distance: '' });
   const [editingId, setEditingId] = useState(null);
 
-  // New Exercise Modal State
   const [showNewExForm, setShowNewExForm] = useState(false);
   const [newExName, setNewExName] = useState('');
   const [newExCat, setNewExCat] = useState('Push');
@@ -40,7 +38,6 @@ export default function RoutineManager() {
     setLoading(false);
   };
 
-  // --- EXERCISE LOGIC ---
   const handleCreateExercise = async () => {
     if (!newExName) return alert("Name required");
     await addExercise(newExName, newExCat);
@@ -65,7 +62,6 @@ export default function RoutineManager() {
     if (isSelected) {
       setSelectedExercises(selectedExercises.filter(item => String(item.id) !== String(ex.id)));
     } else {
-      // Add to end of list
       setSelectedExercises([
         ...selectedExercises, 
         { id: ex.id, name: ex.name, targetSets: 3, targetReps: 10 }
@@ -100,7 +96,6 @@ export default function RoutineManager() {
     setSelectedExercises(newList);
   };
 
-  // --- CARDIO LOGIC ---
   const addCardioToRoutine = () => {
     if (!cardioInput.duration) return alert("Duration required");
     const newCardio = {
@@ -117,7 +112,6 @@ export default function RoutineManager() {
     setRoutineCardio(routineCardio.filter(c => c.id !== id));
   };
 
-  // --- MAIN FORM LOGIC ---
   const handleRestToggle = () => {
     const newState = !isRestDay;
     setIsRestDay(newState);
@@ -207,15 +201,15 @@ export default function RoutineManager() {
 
   if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading...</div>;
 
+  // FIXED: w-full overflow-x-hidden
   return (
-    <div className="max-w-md mx-auto text-white pb-20">
+    <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       <h2 className="text-xl font-bold mb-4 text-gray-300">
         {editingId ? 'Edit Routine' : 'Routine Builder'}
       </h2>
 
       <div className={`p-4 rounded-lg border mb-8 transition-colors ${editingId ? 'bg-zinc-800 border-blue-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
         
-        {/* Day Selector */}
         <label className="block text-xs text-zinc-500 uppercase font-bold mb-2">Day of Week</label>
         <div className="grid grid-cols-4 gap-2 mb-6">
           {DAYS.map(day => (
@@ -225,7 +219,6 @@ export default function RoutineManager() {
           ))}
         </div>
 
-        {/* Rest Day Toggle */}
         <div onClick={handleRestToggle} className={`flex items-center gap-3 p-3 rounded mb-4 cursor-pointer border ${isRestDay ? 'bg-green-900/20 border-green-500/50' : 'bg-black border-zinc-800'}`}>
           <div className={`w-5 h-5 rounded border flex items-center justify-center ${isRestDay ? 'bg-green-500 border-green-500' : 'border-zinc-600'}`}>
             {isRestDay && <span className="text-black text-xs font-bold">✓</span>}
@@ -259,7 +252,7 @@ export default function RoutineManager() {
             </div>
           </div>
 
-          {/* --- SECTION 1: SELECTED EXERCISES (REORDERABLE) --- */}
+          {/* --- SECTION 1: SELECTED EXERCISES --- */}
           {selectedExercises.length > 0 && (
             <div className="mb-6">
                 <label className="text-xs text-blue-400 uppercase font-bold mb-2 block">Routine Order</label>
@@ -272,27 +265,14 @@ export default function RoutineManager() {
                                     <span className="font-bold text-white text-sm">{ex.name}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {/* Reorder Buttons */}
                                     <div className="flex gap-1">
-                                        <button 
-                                            onClick={() => moveExercise(idx, -1)}
-                                            className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-30 pointer-events-none' : ''}`}
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
-                                        </button>
-                                        <button 
-                                            onClick={() => moveExercise(idx, 1)}
-                                            className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === selectedExercises.length - 1 ? 'opacity-30 pointer-events-none' : ''}`}
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
+                                        <button onClick={() => moveExercise(idx, -1)} className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-30 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg></button>
+                                        <button onClick={() => moveExercise(idx, 1)} className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === selectedExercises.length - 1 ? 'opacity-30 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></button>
                                     </div>
                                     <div className="w-px h-4 bg-zinc-600 mx-1"></div>
                                     <button onClick={() => removeSelectedExercise(idx)} className="text-red-500 hover:text-red-400">✕</button>
                                 </div>
                             </div>
-                            
-                            {/* Targets Row */}
                             <div className="flex gap-4 pl-7">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-zinc-500 uppercase font-bold">Sets</span>
@@ -309,7 +289,7 @@ export default function RoutineManager() {
             </div>
           )}
 
-          {/* --- SECTION 2: EXERCISE LIBRARY (ADDER) --- */}
+          {/* --- SECTION 2: EXERCISE LIBRARY --- */}
           <div className="flex justify-between items-end mb-2 pt-4 border-t border-zinc-800">
             <label className="text-xs text-gray-500 uppercase font-bold">Exercise Library</label>
             <button onClick={() => setShowNewExForm(!showNewExForm)} className="text-[10px] bg-zinc-800 text-blue-400 border border-blue-900/30 px-2 py-1 rounded hover:bg-zinc-700">
@@ -317,7 +297,6 @@ export default function RoutineManager() {
             </button>
           </div>
 
-          {/* New Custom Exercise Form */}
           {showNewExForm && (
             <div className="bg-black border border-blue-500/50 p-3 rounded mb-4 animate-fade-in">
                 <label className="text-[10px] text-blue-400 font-bold block mb-1">Name</label>
@@ -330,7 +309,6 @@ export default function RoutineManager() {
             </div>
           )}
 
-          {/* The Library List */}
           <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
             {allExercises.map(ex => {
               const isSelected = selectedExercises.some(item => String(item.id) === String(ex.id));
@@ -359,7 +337,6 @@ export default function RoutineManager() {
         </div>
       </div>
       
-      {/* Read-Only Schedule List */}
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Your Schedule</h3>
       <div className="space-y-3">
         {routines.sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).map(routine => {

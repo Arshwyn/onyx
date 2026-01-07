@@ -351,8 +351,9 @@ export default function DailyView() {
     return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Onyx...</div>;
   }
 
+  // NOTE: Added "overflow-x-hidden" and ensured max-width containment
   return (
-    <div className="max-w-md mx-auto text-white pb-20">
+    <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
       {/* MOUNT MODAL */}
       <ConfirmModal 
@@ -366,35 +367,35 @@ export default function DailyView() {
 
       {/* 1. NAVIGATION HEADER */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
-        <div className="flex justify-between items-center mb-4">
-            <button onClick={() => changeDay(-1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
+        <div className="flex justify-between items-center mb-4 px-1">
+            <button onClick={() => changeDay(-1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
-            <div className="text-center">
-                <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center gap-2 justify-center">
+            <div className="text-center flex-1 mx-2">
+                <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center justify-center gap-2">
                     {formattedDate} 
                     {!isToday && (
-                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">Today</button>
+                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white whitespace-nowrap">Today</button>
                     )}
                 </div>
             </div>
-            <button onClick={() => changeDay(1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
+            <button onClick={() => changeDay(1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
         </div>
-        <div className="flex justify-between items-end">
-            <div>
-                <h1 className="text-3xl font-black italic uppercase">
+        <div className="flex justify-between items-end px-1">
+            <div className="flex-1 min-w-0 pr-2">
+                <h1 className="text-3xl font-black italic uppercase truncate">
                     {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
                 </h1>
                 {isSwapped && (
                     <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped Routine</span>
+                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped</span>
                         <button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button>
                     </div>
                 )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-shrink-0">
                 {!isToday && !isNoRoutine && !isScheduledRest && (
                     <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>
                 )}
@@ -419,7 +420,7 @@ export default function DailyView() {
           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
             <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Morning Body Weight</label>
             <div className="flex gap-2">
-              <input type="number" placeholder="0.0" value={weightInput} onChange={(e) => setWeightInput(e.target.value)} className="flex-1 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+              <input type="number" placeholder="0.0" value={weightInput} onChange={(e) => setWeightInput(e.target.value)} className="flex-1 min-w-0 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
               <button onClick={handleSaveWeight} className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Save</button>
             </div>
           </div>
@@ -444,12 +445,13 @@ export default function DailyView() {
 
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
                 <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
-                <div className="flex gap-2">
-                    <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="w-1/3 bg-black border border-zinc-700 rounded p-2 text-white text-xs outline-none">
+                <div className="flex gap-2 w-full">
+                    {/* FIXED WIDTH CONSTRAINT: shrink flex basis */}
+                    <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="flex-1 min-w-0 bg-black border border-zinc-700 rounded p-2 text-white text-xs outline-none">
                         {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
-                    <input type="number" placeholder="Value" value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="flex-1 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
-                    <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Log</button>
+                    <input type="number" placeholder="Value" value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="w-20 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+                    <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-3 rounded text-xs hover:bg-gray-200 transition">Log</button>
                 </div>
             </div>
         </div>
@@ -527,7 +529,7 @@ export default function DailyView() {
         </div>
       ) : (
         <div className="space-y-4">
-          {exercises.map((ex, idx) => { // Added index for reordering
+          {exercises.map((ex, idx) => {
             const strId = String(ex.id);
             const isComplete = completedIds.includes(strId);
             const isExpanded = expandedIds.includes(strId);
@@ -537,34 +539,22 @@ export default function DailyView() {
             return (
               <div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}>
-                  <div>
+                  <div className="flex-1 min-w-0"> {/* Allow shrinking */}
                     <div className="flex items-center gap-2">
-                      <h3 className={`font-bold text-lg ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
-                      {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Done</span>}
+                      <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
+                      {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
                     </div>
                     <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
                   </div>
                   
                   {/* RIGHT SIDE CONTAINER */}
-                  <div className="text-right flex flex-col items-end gap-2">
-                    {/* REORDER BUTTONS (SIDE-BY-SIDE) */}
+                  <div className="text-right flex flex-col items-end gap-2 ml-2 flex-shrink-0">
                     {!isComplete && (
                         <div className="flex gap-1 mb-1">
-                           <button 
-                             onClick={(e) => moveExercise(idx, -1, e)}
-                             className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}
-                           >
-                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
-                           </button>
-                           <button 
-                             onClick={(e) => moveExercise(idx, 1, e)}
-                             className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}
-                           >
-                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                           </button>
+                           <button onClick={(e) => moveExercise(idx, -1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg></button>
+                           <button onClick={(e) => moveExercise(idx, 1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></button>
                         </div>
                     )}
-
                     {isComplete ? (
                       <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">{isExpanded ? 'Hide' : 'Show'} <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span></div>
                     ) : (

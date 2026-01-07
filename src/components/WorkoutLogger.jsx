@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { getExercises, addLog, addCardioLog } from '../dataManager';
 
 export default function WorkoutLogger() {
-  const [mode, setMode] = useState('lifting'); // 'lifting' or 'cardio'
+  const [mode, setMode] = useState('lifting');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // --- LIFTING STATE ---
+  
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
-  // --- CARDIO STATE ---
   const [cardioType, setCardioType] = useState('Run');
   const [cardioDuration, setCardioDuration] = useState('');
   const [cardioDistance, setCardioDistance] = useState('');
@@ -27,7 +25,6 @@ export default function WorkoutLogger() {
     fetchEx();
   }, []);
 
-  // --- LIFTING LOGIC ---
   const handleAddSet = () => {
     setSets([...sets, { weight: '', reps: '' }]);
   };
@@ -51,7 +48,7 @@ export default function WorkoutLogger() {
     try {
       await addLog(date, exerciseId, validSets);
       alert("Workout Logged!");
-      setSets([{ weight: '', reps: '' }]); // Reset form
+      setSets([{ weight: '', reps: '' }]); 
     } catch (err) {
       alert("Error saving workout. Please try again.");
     } finally {
@@ -59,10 +56,9 @@ export default function WorkoutLogger() {
     }
   };
 
-  // --- CARDIO LOGIC ---
   const saveCardio = async () => {
     if (!cardioDuration) return alert("Duration is required");
-
+    
     setIsSubmitting(true);
     try {
       await addCardioLog(date, cardioType, cardioDuration, cardioDistance);
@@ -76,35 +72,36 @@ export default function WorkoutLogger() {
     }
   };
 
+  // FIXED: w-full overflow-x-hidden
   return (
-    <div className="max-w-md mx-auto text-white">
+    <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
 
-      {/* Mode Toggle */}
       <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-6">
-        <button
+        <button 
           onClick={() => setMode('lifting')}
-          className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'lifting' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
+          className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${
+            mode === 'lifting' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
         >
           Lifting
         </button>
-        <button
+        <button 
           onClick={() => setMode('cardio')}
-          className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'cardio' ? 'bg-blue-900/50 text-blue-200' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
+          className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${
+            mode === 'cardio' ? 'bg-blue-900/50 text-blue-200' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
         >
           Cardio
         </button>
       </div>
 
-      {/* --- LIFTING FORM --- */}
       {mode === 'lifting' && (
         <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800">
           <div className="mb-4">
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Date</label>
-            <input
-              type="date"
+            <input 
+              type="date" 
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-full bg-black border border-zinc-700 rounded p-2 text-white"
@@ -113,8 +110,8 @@ export default function WorkoutLogger() {
 
           <div className="mb-4">
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Exercise</label>
-            <select
-              value={exerciseId}
+            <select 
+              value={exerciseId} 
               onChange={(e) => setExerciseId(e.target.value)}
               className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none"
             >
@@ -128,16 +125,16 @@ export default function WorkoutLogger() {
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="lbs"
+                <input 
+                  type="number" 
+                  placeholder="lbs" 
                   value={set.weight}
                   onChange={(e) => handleSetChange(index, 'weight', e.target.value)}
                   className="w-full bg-black border border-zinc-700 rounded p-2 text-white"
                 />
-                <input
-                  type="number"
-                  placeholder="reps"
+                <input 
+                  type="number" 
+                  placeholder="reps" 
                   value={set.reps}
                   onChange={(e) => handleSetChange(index, 'reps', e.target.value)}
                   className="w-full bg-black border border-zinc-700 rounded p-2 text-white"
@@ -150,24 +147,24 @@ export default function WorkoutLogger() {
             </button>
           </div>
 
-          <button
+          <button 
             onClick={saveLift}
             disabled={isSubmitting}
-            className={`w-full font-bold py-3 rounded transition uppercase tracking-widest text-xs ${isSubmitting ? 'bg-zinc-600 text-zinc-400' : 'bg-white text-black hover:bg-gray-200'
-              }`}
+            className={`w-full font-bold py-3 rounded transition uppercase tracking-widest text-xs ${
+                isSubmitting ? 'bg-zinc-600 text-zinc-400' : 'bg-white text-black hover:bg-gray-200'
+            }`}
           >
             {isSubmitting ? 'Saving...' : 'Log Workout'}
           </button>
         </div>
       )}
 
-      {/* --- CARDIO FORM --- */}
       {mode === 'cardio' && (
         <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 animate-fade-in">
           <div className="mb-4">
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Date</label>
-            <input
-              type="date"
+            <input 
+              type="date" 
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-full bg-black border border-zinc-700 rounded p-2 text-white"
@@ -176,7 +173,7 @@ export default function WorkoutLogger() {
 
           <div className="mb-4">
             <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label>
-            <select
+            <select 
               value={cardioType}
               onChange={(e) => setCardioType(e.target.value)}
               className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none"
@@ -186,20 +183,20 @@ export default function WorkoutLogger() {
           </div>
 
           <div className="flex gap-3 mb-6">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label>
-              <input
-                type="number"
+              <input 
+                type="number" 
                 value={cardioDuration}
                 onChange={(e) => setCardioDuration(e.target.value)}
                 className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none"
                 placeholder="0"
               />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label>
-              <input
-                type="number"
+              <input 
+                type="number" 
                 value={cardioDistance}
                 onChange={(e) => setCardioDistance(e.target.value)}
                 className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none"
@@ -208,11 +205,12 @@ export default function WorkoutLogger() {
             </div>
           </div>
 
-          <button
+          <button 
             onClick={saveCardio}
             disabled={isSubmitting}
-            className={`w-full font-bold py-3 rounded transition uppercase tracking-widest text-xs ${isSubmitting ? 'bg-zinc-600 text-zinc-400' : 'bg-white text-black hover:bg-gray-200'
-              }`}
+            className={`w-full font-bold py-3 rounded transition uppercase tracking-widest text-xs ${
+                isSubmitting ? 'bg-zinc-600 text-zinc-400' : 'bg-white text-black hover:bg-gray-200'
+            }`}
           >
             {isSubmitting ? 'Saving...' : 'Log Cardio'}
           </button>

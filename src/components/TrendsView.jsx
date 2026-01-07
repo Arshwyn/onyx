@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   getBodyWeights, addBodyWeight, deleteBodyWeight, 
   getLogs, getExercises,
-  getCircumferences, addCircumference, deleteCircumference // New imports
+  getCircumferences, addCircumference, deleteCircumference 
 } from '../dataManager';
 
 export default function TrendsView() {
@@ -19,9 +19,9 @@ export default function TrendsView() {
   const [inputWeight, setInputWeight] = useState('');
   const [inputDate, setInputDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- STATE: MEASUREMENTS (NEW) ---
-  const [measurementData, setMeasurementData] = useState([]); // All data
-  const [filteredMeasurements, setFilteredMeasurements] = useState([]); // Selected body part data
+  // --- STATE: MEASUREMENTS ---
+  const [measurementData, setMeasurementData] = useState([]); 
+  const [filteredMeasurements, setFilteredMeasurements] = useState([]); 
   const [bodyPart, setBodyPart] = useState('Waist');
   const [inputMeasurement, setInputMeasurement] = useState('');
   const [measureDate, setMeasureDate] = useState(new Date().toISOString().split('T')[0]);
@@ -32,7 +32,6 @@ export default function TrendsView() {
     loadAllData();
   }, []);
 
-  // Update chart when mode or selection changes
   useEffect(() => {
     if (mode === 'exercises' && selectedExId) {
       calculateExerciseTrend(selectedExId);
@@ -48,20 +47,16 @@ export default function TrendsView() {
       getBodyWeights(),
       getExercises(),
       getLogs(),
-      getCircumferences() // Fetch measurements
+      getCircumferences() 
     ]);
 
-    // Setup Body Weight
     bData.sort((a, b) => new Date(a.date) - new Date(b.date));
     setBodyData(bData);
 
-    // Setup Exercises
     setExercises(allEx);
     if (allEx.length > 0 && !selectedExId) setSelectedExId(allEx[0].id);
 
-    // Setup Measurements
     setMeasurementData(mData);
-
     setLoading(false);
   };
 
@@ -79,11 +74,10 @@ export default function TrendsView() {
     setExerciseData(points);
   };
 
-  // --- MEASUREMENT LOGIC ---
   const filterMeasurements = (part) => {
     const filtered = measurementData
       .filter(m => m.body_part === part)
-      .map(m => ({ ...m, weight: m.measurement })) // Map 'measurement' to 'weight' so chart generic logic works
+      .map(m => ({ ...m, weight: m.measurement })) 
       .sort((a, b) => new Date(a.date) - new Date(b.date));
     setFilteredMeasurements(filtered);
   };
@@ -92,8 +86,6 @@ export default function TrendsView() {
     if (!inputMeasurement) return;
     await addCircumference(measureDate, bodyPart, inputMeasurement);
     setInputMeasurement('');
-    
-    // Refresh
     const mData = await getCircumferences();
     setMeasurementData(mData);
   };
@@ -106,7 +98,6 @@ export default function TrendsView() {
     }
   };
 
-  // --- BODY WEIGHT LOGIC ---
   const handleSaveWeight = async () => {
     if (!inputWeight) return;
     await addBodyWeight(inputWeight, inputDate);
@@ -136,7 +127,6 @@ export default function TrendsView() {
 
     const width = 100;
     const height = 50;
-    
     const values = dataPoints.map(p => p.weight);
     const minVal = Math.min(...values) * 0.95; 
     const maxVal = Math.max(...values) * 1.05; 
@@ -169,17 +159,14 @@ export default function TrendsView() {
     );
   };
 
-  if (loading) {
-    return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Trends...</div>;
-  }
+  if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Trends...</div>;
 
+  // FIXED: w-full overflow-x-hidden
   return (
-    <div className="max-w-md mx-auto text-white pb-20">
+    <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase mb-4">Trends</h1>
-        
-        {/* Toggle Bar */}
         <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
           <button onClick={() => setMode('exercises')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded transition ${mode === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Lifts</button>
           <button onClick={() => setMode('bodyweight')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded transition ${mode === 'bodyweight' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Weight</button>
@@ -187,15 +174,12 @@ export default function TrendsView() {
         </div>
       </div>
 
-      {/* --- EXERCISE MODE --- */}
       {mode === 'exercises' && (
         <div className="animate-fade-in">
           <div className="mb-6">
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-2">Select Exercise</label>
             <select value={selectedExId} onChange={(e) => setSelectedExId(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-3 text-white outline-none">
-              {exercises.map(ex => (
-                <option key={ex.id} value={ex.id}>{ex.name}</option>
-              ))}
+              {exercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
             </select>
           </div>
           {renderChart(exerciseData)}
@@ -211,7 +195,6 @@ export default function TrendsView() {
         </div>
       )}
 
-      {/* --- BODY WEIGHT MODE --- */}
       {mode === 'bodyweight' && (
         <div className="animate-fade-in">
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
@@ -243,23 +226,22 @@ export default function TrendsView() {
         </div>
       )}
 
-      {/* --- MEASUREMENTS MODE --- */}
       {mode === 'measurements' && (
         <div className="animate-fade-in">
-          {/* Input Form */}
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
             <div className="mb-3">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Body Part</label>
+                {/* FIXED: Added w-full */}
                 <select value={bodyPart} onChange={(e) => setBodyPart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
                     {BODY_PARTS.map(part => <option key={part} value={part}>{part}</option>)}
                 </select>
             </div>
             <div className="flex gap-2 items-end">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0"> {/* FIXED: min-w-0 */}
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Date</label>
                 <input type="date" value={measureDate} onChange={(e) => setMeasureDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0"> {/* FIXED: min-w-0 */}
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Value</label>
                 <input type="number" value={inputMeasurement} onChange={(e) => setInputMeasurement(e.target.value)} placeholder="in/cm" className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
@@ -267,10 +249,8 @@ export default function TrendsView() {
             </div>
           </div>
 
-          {/* Chart */}
           {renderChart(filteredMeasurements)}
 
-          {/* History List */}
           <div className="space-y-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">{bodyPart} History</h3>
             {[...filteredMeasurements].reverse().map(entry => (
@@ -286,7 +266,6 @@ export default function TrendsView() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

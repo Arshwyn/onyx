@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getLogs, getExercises, deleteLog, updateLog,         // Lifting
-  getCardioLogs, deleteCardioLog, updateCardioLog      // Cardio
+  getLogs, getExercises, deleteLog, updateLog,         
+  getCardioLogs, deleteCardioLog, updateCardioLog      
 } from '../dataManager';
 
 export default function HistoryView() {
@@ -10,7 +10,6 @@ export default function HistoryView() {
   const [exercises, setExercises] = useState([]);
   const [exerciseMap, setExerciseMap] = useState({});
   
-  // Edit Modal State
   const [editingLog, setEditingLog] = useState(null); 
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
@@ -21,31 +20,18 @@ export default function HistoryView() {
   const loadData = async () => {
     setLoading(true);
     
-    // Fetch data in parallel
-    const [loadedLogs, loadedCardio] = await Promise.all([
+    const [loadedLogs, loadedCardio, loadedExercises] = await Promise.all([
       getLogs(),
-      getCardioLogs()
+      getCardioLogs(),
+      getExercises()
     ]);
     
-    const loadedExercises = await getExercises();
-    
-    // Create lookup map
     const map = {};
     loadedExercises.forEach(ex => map[ex.id] = ex.name);
 
-    // 1. Tag Lifting Logs
-    const liftingItems = loadedLogs.map(log => ({
-      ...log,
-      dataType: 'lift' 
-    }));
+    const liftingItems = loadedLogs.map(log => ({ ...log, dataType: 'lift' }));
+    const cardioItems = loadedCardio.map(log => ({ ...log, dataType: 'cardio' }));
 
-    // 2. Tag Cardio Logs
-    const cardioItems = loadedCardio.map(log => ({
-      ...log,
-      dataType: 'cardio' 
-    }));
-
-    // 3. Merge and Sort
     const allItems = [...liftingItems, ...cardioItems];
     allItems.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -55,13 +41,8 @@ export default function HistoryView() {
     setLoading(false);
   };
 
-  // --- ACTIONS ---
-
   const handleDelete = async (item) => {
-    const confirmMsg = item.dataType === 'lift' 
-      ? "Delete this workout?" 
-      : "Delete this cardio session?";
-      
+    const confirmMsg = item.dataType === 'lift' ? "Delete this workout?" : "Delete this cardio session?"; 
     if (window.confirm(confirmMsg)) {
       if (item.dataType === 'lift') {
         await deleteLog(item.id);
@@ -80,13 +61,11 @@ export default function HistoryView() {
     if (!editingLog) return;
 
     if (editingLog.dataType === 'lift') {
-        // Lifting Save Logic
         const validSets = editingLog.sets.filter(s => s.weight && s.reps);
         if (validSets.length === 0) return alert("Must have at least one set.");
         const finalLog = { ...editingLog, sets: validSets };
         await updateLog(finalLog);
     } else {
-        // Cardio Save Logic
         if (!editingLog.duration) return alert("Duration is required.");
         await updateCardioLog(editingLog);
     }
@@ -95,7 +74,6 @@ export default function HistoryView() {
     loadData(); 
   };
 
-  // --- HELPERS FOR LIFT EDITING ---
   const updateEditSet = (index, field, value) => {
     const newSets = [...editingLog.sets];
     newSets[index][field] = value;
@@ -103,10 +81,7 @@ export default function HistoryView() {
   };
 
   const addEditSet = () => {
-    setEditingLog({
-      ...editingLog,
-      sets: [...editingLog.sets, { weight: '', reps: '' }]
-    });
+    setEditingLog({ ...editingLog, sets: [...editingLog.sets, { weight: '', reps: '' }] });
   };
 
   const removeEditSet = (index) => {
@@ -119,7 +94,6 @@ export default function HistoryView() {
     combinedHistory.forEach(item => {
       if (item.dataType === 'lift') {
         const exName = exerciseMap[item.exerciseId || item.exercise_id] || 'Unknown';
-        // Handle potentially different set structure from DB
         const sets = item.sets || [];
         sets.forEach(set => {
           csv += `LIFT,${item.date},"${exName}",${set.weight},${set.reps}\n`;
@@ -137,13 +111,12 @@ export default function HistoryView() {
     a.click();
   };
 
-  if (loading) {
-    return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading History...</div>;
-  }
+  if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading History...</div>;
 
+  // FIXED: w-full overflow-x-hidden
   return (
-    <div className="max-w-md mx-auto text-white pb-10">
-      <div className="flex justify-between items-center mb-6">
+    <div className="w-full max-w-md mx-auto text-white pb-10 overflow-x-hidden">
+      <div className="flex justify-between items-center mb-6 px-1">
         <h2 className="text-xl font-bold text-gray-300">History</h2>
         <button onClick={downloadCSV} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded border border-zinc-700 transition">
           Export CSV
@@ -156,11 +129,14 @@ export default function HistoryView() {
             return (
               <div key={`c-${item.id}`} className="bg-zinc-900/80 rounded border border-blue-900/30 overflow-hidden relative group">
                 <div className="p-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                     <div className="bg-blue-900/20 text-blue-400 p-2 rounded-full"><span className="text-xs font-bold">C</span></div>
-                     <div><span className="text-blue-400 font-bold block">{item.type}</span><span className="text-xs text-zinc-500 font-mono">{item.date}</span></div>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                     <div className="bg-blue-900/20 text-blue-400 p-2 rounded-full flex-shrink-0"><span className="text-xs font-bold">C</span></div>
+                     <div className="min-w-0">
+                        <span className="text-blue-400 font-bold block truncate">{item.type}</span>
+                        <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
+                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-shrink-0">
                     <div className="text-right">
                         <span className="block text-white font-bold">{item.duration} <span className="text-xs text-zinc-500 font-normal">min</span></span>
                         {item.distance && <span className="block text-xs text-zinc-400">{item.distance} dist</span>}
@@ -178,11 +154,11 @@ export default function HistoryView() {
           return (
             <div key={`l-${item.id}`} className="bg-zinc-900 rounded border border-zinc-800 overflow-hidden relative group">
               <div className="bg-zinc-800/50 p-3 flex justify-between items-center">
-                <div>
-                  <span className="font-bold text-gray-200 block">{exerciseMap[item.exerciseId || item.exercise_id] || 'Unknown Exercise'}</span>
+                <div className="min-w-0 flex-1 pr-2">
+                  <span className="font-bold text-gray-200 block truncate">{exerciseMap[item.exerciseId || item.exercise_id] || 'Unknown Exercise'}</span>
                   <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0">
                   <button onClick={() => startEditing(item)} className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded transition">Edit</button>
                   <button onClick={() => handleDelete(item)} className="text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-900/50 transition">Del</button>
                 </div>
