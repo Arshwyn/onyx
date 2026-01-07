@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { getRoutines, getExercises, addLog, getLogs } from '../dataManager';
+import { 
+  getRoutines, getExercises, addLog, getLogs, // Exercise Data
+  getBodyWeights, addBodyWeight // Weight Data
+} from '../dataManager';
 
 export default function DailyView() {
   const [todayRoutine, setTodayRoutine] = useState(null);
   const [todayExercises, setTodayExercises] = useState([]);
   const [currentDay, setCurrentDay] = useState('');
   
-  // Data for inputs
+  // Exercise State
   const [setInputs, setSetInputs] = useState({});
-  
-  // Visual States
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
-  
-  // New State: Store "Last Time" stats
   const [lastPerformances, setLastPerformances] = useState({});
+
+  // Body Weight State
+  const [todayWeight, setTodayWeight] = useState(null); // null or the logged value
+  const [weightInput, setWeightInput] = useState('');
 
   useEffect(() => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -24,16 +27,20 @@ export default function DailyView() {
     
     setCurrentDay(todayDayName);
 
-    // 1. Load Logs
+    // --- 1. CHECK BODY WEIGHT STATUS ---
+    const weights = getBodyWeights();
+    const existingWeight = weights.find(w => w.date === todayDateString);
+    if (existingWeight) {
+      setTodayWeight(existingWeight.weight);
+    }
+
+    // --- 2. LOAD WORKOUT LOGS ---
     const allLogs = getLogs();
-    
-    // Check what is done TODAY
     const todaysLogs = allLogs.filter(log => log.date === todayDateString);
-    // Convert IDs to strings for safe comparison
     const doneIds = todaysLogs.map(log => String(log.exerciseId));
     setCompletedIds(doneIds);
 
-    // 2. Load Routine
+    // --- 3. LOAD ROUTINE ---
     const routines = getRoutines();
     const routine = routines.find(r => r.day === todayDayName);
     
@@ -52,7 +59,7 @@ export default function DailyView() {
 
       setTodayExercises(mergedData);
 
-      // 3. Initialize Inputs
+      // Initialize Inputs
       const initialInputs = {};
       mergedData.forEach(ex => {
         initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
@@ -62,21 +69,18 @@ export default function DailyView() {
       });
       setSetInputs(initialInputs);
 
-      // 4. Calculate "Last Time" Stats
+      // Calculate "Last Time" Stats
       const historyStats = {};
       mergedData.forEach(ex => {
-        // FIX: Compare IDs as Strings to avoid mismatches (number vs string)
         const pastLogs = allLogs.filter(l => 
           String(l.exerciseId) === String(ex.id) && 
-          l.date !== todayDateString // Don't show today's log as "Last"
+          l.date !== todayDateString 
         );
         
         if (pastLogs.length > 0) {
-          // Sort by date descending (newest first)
           pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
           const lastLog = pastLogs[0]; 
 
-          // Find the "Best Set" (Max Weight)
           if (lastLog.sets && lastLog.sets.length > 0) {
             const bestSet = lastLog.sets.reduce((prev, current) => 
               (Number(current.weight) > Number(prev.weight) ? current : prev)
@@ -89,6 +93,15 @@ export default function DailyView() {
       setLastPerformances(historyStats);
     }
   }, []);
+
+  // --- ACTIONS ---
+
+  const handleSaveWeight = () => {
+    if (!weightInput) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    addBodyWeight(weightInput, todayStr);
+    setTodayWeight(weightInput);
+  };
 
   const handleSetChange = (exId, index, field, value) => {
     setSetInputs(prev => {
@@ -133,6 +146,8 @@ export default function DailyView() {
     }
   };
 
+  // --- RENDER ---
+
   if (!todayRoutine) {
     return (
       <div className="text-center mt-20 text-gray-500">
@@ -145,11 +160,52 @@ export default function DailyView() {
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
+      
+      {/* 1. Header */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <h2 className="text-sm text-blue-400 font-bold uppercase tracking-wider">{currentDay}</h2>
         <h1 className="text-3xl font-black italic uppercase">{todayRoutine.name}</h1>
       </div>
 
+      {/* 2. Morning Check-In (Body Weight) */}
+      <div className="mb-8">
+        {todayWeight ? (
+          // STATE: LOGGED
+          <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <div>
+                <span className="text-xs text-green-500 font-bold uppercase block">Morning Check-In</span>
+                <span className="text-white font-bold">{todayWeight} lbs</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // STATE: NOT LOGGED
+          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
+            <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Morning Body Weight</label>
+            <div className="flex gap-2">
+              <input 
+                type="number" 
+                placeholder="0.0" 
+                value={weightInput}
+                onChange={(e) => setWeightInput(e.target.value)}
+                className="flex-1 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition"
+              />
+              <button 
+                onClick={handleSaveWeight}
+                className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Routine List */}
       <div className="space-y-4">
         {todayExercises.map(ex => {
           const strId = String(ex.id);
@@ -201,8 +257,6 @@ export default function DailyView() {
                           {ex.targetSets} x {ex.targetReps}
                         </span>
                       </div>
-
-                      {/* Display LAST stats if available */}
                       {lastStats && (
                         <div>
                           <span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span>

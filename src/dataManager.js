@@ -96,3 +96,25 @@ export const deleteRoutine = (id) => {
     localStorage.setItem(ROUTINES_KEY, JSON.stringify(updated));
     return updated;
 };
+
+const WEIGHT_KEY = 'onyx_bodyweight';
+
+export const getBodyWeights = () => {
+  const stored = localStorage.getItem(WEIGHT_KEY);
+  return stored ? JSON.parse(stored) : [];
+};
+
+export const addBodyWeight = (weight, date) => {
+  const weights = getBodyWeights();
+  const newEntry = { id: Date.now(), weight: parseFloat(weight), date };
+  const updated = [...weights, newEntry];
+  localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+export const deleteBodyWeight = (id) => {
+  const weights = getBodyWeights();
+  const updated = weights.filter(w => w.id !== id);
+  localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
+  return updated;
+};
