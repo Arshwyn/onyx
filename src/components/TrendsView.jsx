@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getBodyWeights, addBodyWeight, deleteBodyWeight, // Body Weight Ops
-  getLogs, getExercises // Exercise Ops
+  getBodyWeights, addBodyWeight, deleteBodyWeight, 
+  getLogs, getExercises 
 } from '../dataManager';
 
 export default function TrendsView() {
+  const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('exercises'); // 'exercises' or 'bodyweight'
   
   // --- STATE: EXERCISES ---
   const [exercises, setExercises] = useState([]);
   const [selectedExId, setSelectedExId] = useState('');
-  const [exerciseData, setExerciseData] = useState([]); // [{ date, weight, id }]
+  const [exerciseData, setExerciseData] = useState([]); 
 
   // --- STATE: BODY WEIGHT ---
   const [bodyData, setBodyData] = useState([]);
@@ -22,64 +23,65 @@ export default function TrendsView() {
   }, []);
 
   useEffect(() => {
-    // When switching to exercise mode or changing selection, calculate chart data
     if (mode === 'exercises' && selectedExId) {
       calculateExerciseTrend(selectedExId);
     }
   }, [mode, selectedExId]);
 
-  const loadAllData = () => {
+  const loadAllData = async () => {
+    setLoading(true);
     // 1. Load Body Data
-    const bData = getBodyWeights();
+    const bData = await getBodyWeights();
     bData.sort((a, b) => new Date(a.date) - new Date(b.date));
     setBodyData(bData);
 
     // 2. Load Exercises
-    const allEx = getExercises();
+    const allEx = await getExercises();
     setExercises(allEx);
     if (allEx.length > 0 && !selectedExId) {
-      setSelectedExId(allEx[0].id); // Default to first exercise
+      setSelectedExId(allEx[0].id);
     }
+    setLoading(false);
   };
 
-  // --- LOGIC: EXERCISE TRENDS ---
-  const calculateExerciseTrend = (exId) => {
-    const allLogs = getLogs();
+  const calculateExerciseTrend = async (exId) => {
+    const allLogs = await getLogs(); // This could be optimized to not fetch all every time
     // Filter for this exercise
-    const relevantLogs = allLogs.filter(l => String(l.exerciseId) === String(exId));
+    const relevantLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(exId));
     
     // Process into simple { date, weight } points
     const points = relevantLogs.map(log => {
-      // Find the heaviest set of that day
-      const maxWeight = log.sets.reduce((max, set) => {
+      const sets = log.sets || [];
+      const maxWeight = sets.reduce((max, set) => {
         return Math.max(max, parseFloat(set.weight) || 0);
       }, 0);
       return { id: log.id, date: log.date, weight: maxWeight };
     });
 
-    // Sort by date
     points.sort((a, b) => new Date(a.date) - new Date(b.date));
     setExerciseData(points);
   };
 
-  // --- LOGIC: BODY WEIGHT ACTIONS ---
-  const handleSaveWeight = () => {
+  const handleSaveWeight = async () => {
     if (!inputWeight) return;
-    addBodyWeight(inputWeight, inputDate);
+    await addBodyWeight(inputWeight, inputDate);
     setInputWeight('');
-    const newData = getBodyWeights().sort((a, b) => new Date(a.date) - new Date(b.date));
-    setBodyData(newData);
+    
+    // Refresh
+    const bData = await getBodyWeights();
+    bData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    setBodyData(bData);
   };
 
-  const handleDeleteWeight = (id) => {
+  const handleDeleteWeight = async (id) => {
     if (confirm("Delete this entry?")) {
-      deleteBodyWeight(id);
-      const newData = getBodyWeights().sort((a, b) => new Date(a.date) - new Date(b.date));
-      setBodyData(newData);
+      await deleteBodyWeight(id);
+      const bData = await getBodyWeights();
+      bData.sort((a, b) => new Date(a.date) - new Date(b.date));
+      setBodyData(bData);
     }
   };
 
-  // --- SHARED: CHART GENERATOR ---
   const renderChart = (dataPoints) => {
     if (dataPoints.length < 2) {
       return (
@@ -92,13 +94,11 @@ export default function TrendsView() {
     const width = 100;
     const height = 50;
     
-    // Calculate range
     const values = dataPoints.map(p => p.weight);
-    const minVal = Math.min(...values) * 0.95; // 5% buffer bottom
-    const maxVal = Math.max(...values) * 1.05; // 5% buffer top
+    const minVal = Math.min(...values) * 0.95; 
+    const maxVal = Math.max(...values) * 1.05; 
     const range = maxVal - minVal || 1;
 
-    // Generate path
     const pathD = dataPoints.map((point, index) => {
       const x = (index / (dataPoints.length - 1)) * width;
       const y = height - ((point.weight - minVal) / range) * height;
@@ -126,54 +126,33 @@ export default function TrendsView() {
     );
   };
 
+  if (loading) {
+    return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Trends...</div>;
+  }
+
   return (
     <div className="max-w-md mx-auto text-white pb-20">
       
-      {/* Header & Toggle */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase mb-4">Trends</h1>
         
         <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-          <button 
-            onClick={() => setMode('exercises')}
-            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${
-              mode === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            Lifts
-          </button>
-          <button 
-            onClick={() => setMode('bodyweight')}
-            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${
-              mode === 'bodyweight' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            Body Weight
-          </button>
+          <button onClick={() => setMode('exercises')} className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Lifts</button>
+          <button onClick={() => setMode('bodyweight')} className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded transition ${mode === 'bodyweight' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Body Weight</button>
         </div>
       </div>
 
-      {/* === MODE: EXERCISES === */}
       {mode === 'exercises' && (
         <div>
-          {/* Selector */}
           <div className="mb-6">
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-2">Select Exercise</label>
-            <select 
-              value={selectedExId}
-              onChange={(e) => setSelectedExId(e.target.value)}
-              className="w-full bg-black border border-zinc-700 rounded p-3 text-white outline-none"
-            >
+            <select value={selectedExId} onChange={(e) => setSelectedExId(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-3 text-white outline-none">
               {exercises.map(ex => (
                 <option key={ex.id} value={ex.id}>{ex.name}</option>
               ))}
             </select>
           </div>
-
-          {/* Chart */}
           {renderChart(exerciseData)}
-
-          {/* List of Records */}
           <div className="space-y-2">
              <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">Log History</h3>
              {[...exerciseData].reverse().map((entry, idx) => (
@@ -182,49 +161,26 @@ export default function TrendsView() {
                  <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">lbs</span></span>
                </div>
              ))}
-             {exerciseData.length === 0 && <p className="text-zinc-600 text-sm italic">No logs found for this exercise.</p>}
           </div>
         </div>
       )}
 
-      {/* === MODE: BODY WEIGHT === */}
       {mode === 'bodyweight' && (
         <div>
-          {/* Input */}
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
             <div className="flex gap-2 items-end">
               <div className="flex-1">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Date</label>
-                <input 
-                  type="date" 
-                  value={inputDate}
-                  onChange={(e) => setInputDate(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm"
-                />
+                <input type="date" value={inputDate} onChange={(e) => setInputDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
               <div className="flex-1">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Weight</label>
-                <input 
-                  type="number" 
-                  value={inputWeight}
-                  onChange={(e) => setInputWeight(e.target.value)}
-                  placeholder="lbs"
-                  className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm"
-                />
+                <input type="number" value={inputWeight} onChange={(e) => setInputWeight(e.target.value)} placeholder="lbs" className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
-              <button 
-                onClick={handleSaveWeight}
-                className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200"
-              >
-                Log
-              </button>
+              <button onClick={handleSaveWeight} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
             </div>
           </div>
-
-          {/* Chart */}
           {renderChart(bodyData)}
-
-          {/* List */}
           <div className="space-y-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">History</h3>
             {[...bodyData].sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => (
@@ -232,19 +188,13 @@ export default function TrendsView() {
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
                   <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">lbs</span></span>
-                  <button 
-                    onClick={() => handleDeleteWeight(entry.id)}
-                    className="text-zinc-600 hover:text-red-500 transition"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => handleDeleteWeight(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -1,159 +1,190 @@
-// src/dataManager.js
+import { supabase } from './supabaseClient';
 
-const EXERCISE_KEY = 'onyx_exercises';
-const LOGS_KEY = 'onyx_logs';
+// --- HELPER: Get Current User ---
+const getUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id;
+};
 
+// --- 1. EXERCISES ---
 const DEFAULT_EXERCISES = [
-    { id: 1, name: "Squat", category: "Legs" },
-    { id: 2, name: "Bench Press", category: "Chest" },
-    { id: 3, name: "Deadlift", category: "Back" },
-    { id: 4, name: "Overhead Press", category: "Shoulders" },
-    { id: 5, name: "Pull Up", category: "Back" },
+  { id: 'ex_1', name: 'Squat', category: 'Legs' },
+  { id: 'ex_2', name: 'Bench Press', category: 'Push' },
+  { id: 'ex_3', name: 'Deadlift', category: 'Pull' },
+  { id: 'ex_4', name: 'Overhead Press', category: 'Push' },
+  { id: 'ex_5', name: 'Dumbbell Row', category: 'Pull' },
+  { id: 'ex_6', name: 'Lunges', category: 'Legs' },
+  { id: 'ex_7', name: 'Pull Up', category: 'Pull' },
+  { id: 'ex_8', name: 'Dips', category: 'Push' },
+  { id: 'ex_9', name: 'Lateral Raise', category: 'Push' },
+  { id: 'ex_10', name: 'Bicep Curl', category: 'Pull' },
+  { id: 'ex_11', name: 'Tricep Extension', category: 'Push' },
+  { id: 'ex_12', name: 'Leg Press', category: 'Legs' },
+  { id: 'ex_13', name: 'Leg Curl', category: 'Legs' },
+  { id: 'ex_14', name: 'Calf Raise', category: 'Legs' },
+  { id: 'ex_15', name: 'Face Pull', category: 'Pull' }
 ];
 
-// --- EXERCISES ---
-
-export const getExercises = () => {
-    const stored = localStorage.getItem(EXERCISE_KEY);
-    if (!stored) {
-        localStorage.setItem(EXERCISE_KEY, JSON.stringify(DEFAULT_EXERCISES));
-        return DEFAULT_EXERCISES;
-    }
-    return JSON.parse(stored);
+export const getExercises = async () => {
+  // Fetch custom exercises from DB
+  const { data, error } = await supabase.from('custom_exercises').select('*');
+  if (error) console.error(error);
+  
+  const custom = data || [];
+  // Merge defaults with custom ones
+  // We map DB IDs to strings to ensure compatibility
+  const formattedCustom = custom.map(e => ({...e, id: String(e.id)}));
+  
+  return [...DEFAULT_EXERCISES, ...formattedCustom];
 };
 
-export const addExercise = (name, category) => {
-    const exercises = getExercises();
-    const newExercise = {
-        id: Date.now(),
-        name,
-        category
-    };
-    const updatedList = [...exercises, newExercise];
-    localStorage.setItem(EXERCISE_KEY, JSON.stringify(updatedList));
-    return updatedList;
+export const addExercise = async (name, category) => {
+  const userId = await getUser();
+  const { data, error } = await supabase.from('custom_exercises').insert([{
+    user_id: userId,
+    name, 
+    category
+  }]).select();
+  
+  if (error) console.error(error);
+  return data;
 };
 
-export const getLogs = () => {
-    const stored = localStorage.getItem(LOGS_KEY);
-    return stored ? JSON.parse(stored) : [];
+export const deleteCustomExercise = async (id) => {
+  // Only allow deleting if it's NOT a default exercise (defaults start with 'ex_')
+  if (String(id).startsWith('ex_')) return;
+
+  const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
+  if (error) console.error(error);
 };
 
-export const addLog = (date, exerciseId, sets) => {
-    const logs = getLogs();
-    const newLog = {
-        id: Date.now(),
-        date,        // Format: "YYYY-MM-DD"
-        exerciseId,  // The ID of the exercise performed
-        sets         // Array like: [{weight: 100, reps: 10}]
-    };
-
-    const updatedLogs = [...logs, newLog];
-    localStorage.setItem(LOGS_KEY, JSON.stringify(updatedLogs));
-    return updatedLogs;
+// --- 2. ROUTINES ---
+export const getRoutines = async () => {
+  const { data, error } = await supabase.from('routines').select('*');
+  if (error) console.error('Error fetching routines:', error);
+  return data || [];
 };
 
-export const deleteLog = (logId) => {
-    const logs = getLogs();
-    const updatedLogs = logs.filter(log => log.id !== logId);
-    localStorage.setItem(LOGS_KEY, JSON.stringify(updatedLogs));
-    return updatedLogs;
+export const saveRoutine = async (routine) => {
+  const userId = await getUser();
+  const payload = {
+    user_id: userId,
+    day: routine.day,
+    name: routine.name,
+    exercises: routine.exercises,
+    cardio: routine.cardio || []
+  };
+
+  if (routine.id) {
+    const { data, error } = await supabase.from('routines').update(payload).eq('id', routine.id).select();
+    if (error) console.error(error);
+    return data;
+  } else {
+    const { data, error } = await supabase.from('routines').insert([payload]).select();
+    if (error) console.error(error);
+    return data;
+  }
 };
 
-export const updateLog = (updatedLog) => {
-    const logs = getLogs();
-    const index = logs.findIndex(log => log.id === updatedLog.id);
-
-    if (index !== -1) {
-        logs[index] = updatedLog;
-        localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
-    }
-    return logs;
+export const deleteRoutine = async (id) => {
+  const { error } = await supabase.from('routines').delete().eq('id', id);
+  if (error) console.error(error);
 };
 
-const ROUTINES_KEY = 'onyx_routines';
-
-export const getRoutines = () => {
-    const stored = localStorage.getItem(ROUTINES_KEY);
-    return stored ? JSON.parse(stored) : [];
+// --- 3. LOGS (LIFTING) ---
+export const getLogs = async () => {
+  const { data, error } = await supabase.from('workout_logs').select('*');
+  if (error) console.error('Error fetching logs:', error);
+  return data || [];
 };
 
-export const saveRoutine = (routine) => {
-    const routines = getRoutines();
-    // Remove existing routine for this specific day (if replacing) or id
-    const filtered = routines.filter(r => r.id !== routine.id && r.day !== routine.day);
-
-    const newRoutine = { ...routine, id: routine.id || Date.now() };
-    const updated = [...filtered, newRoutine];
-
-    localStorage.setItem(ROUTINES_KEY, JSON.stringify(updated));
-    return updated;
+export const addLog = async (date, exerciseId, sets) => {
+  const userId = await getUser();
+  const { data, error } = await supabase.from('workout_logs').insert([{
+    user_id: userId,
+    date,
+    exercise_id: String(exerciseId),
+    sets
+  }]).select();
+  if (error) console.error(error);
+  return data;
 };
 
-export const deleteRoutine = (id) => {
-    const routines = getRoutines();
-    const updated = routines.filter(r => r.id !== id);
-    localStorage.setItem(ROUTINES_KEY, JSON.stringify(updated));
-    return updated;
+export const deleteLog = async (id) => {
+  const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+  if (error) console.error(error);
 };
 
-const WEIGHT_KEY = 'onyx_bodyweight';
-
-export const getBodyWeights = () => {
-    const stored = localStorage.getItem(WEIGHT_KEY);
-    return stored ? JSON.parse(stored) : [];
+export const updateLog = async (log) => {
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .update({ sets: log.sets, date: log.date })
+    .eq('id', log.id)
+    .select();
+  if (error) console.error(error);
+  return data;
 };
 
-export const addBodyWeight = (weight, date) => {
-    const weights = getBodyWeights();
-    const newEntry = { id: Date.now(), weight: parseFloat(weight), date };
-    const updated = [...weights, newEntry];
-    localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
-    return updated;
+// --- 4. BODY WEIGHT ---
+export const getBodyWeights = async () => {
+  const { data, error } = await supabase.from('body_weights').select('*');
+  if (error) console.error(error);
+  return data || [];
 };
 
-export const deleteBodyWeight = (id) => {
-    const weights = getBodyWeights();
-    const updated = weights.filter(w => w.id !== id);
-    localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
-    return updated;
+export const addBodyWeight = async (weight, date) => {
+  const userId = await getUser();
+  const { data, error } = await supabase.from('body_weights').insert([{
+    user_id: userId,
+    date,
+    weight
+  }]).select();
+  if (error) console.error(error);
+  return data;
 };
 
-const CARDIO_KEY = 'onyx_cardio';
-
-export const getCardioLogs = () => {
-    const stored = localStorage.getItem(CARDIO_KEY);
-    return stored ? JSON.parse(stored) : [];
+export const deleteBodyWeight = async (id) => {
+  const { error } = await supabase.from('body_weights').delete().eq('id', id);
+  if (error) console.error(error);
 };
 
-export const addCardioLog = (date, type, duration, distance) => {
-    const logs = getCardioLogs();
-    const newLog = {
-        id: Date.now(),
-        date,
-        type,
-        duration: parseFloat(duration),
-        distance: distance ? parseFloat(distance) : null
-    };
-    const updated = [...logs, newLog];
-    localStorage.setItem(CARDIO_KEY, JSON.stringify(updated));
-    return updated;
+// --- 5. CARDIO ---
+export const getCardioLogs = async () => {
+  const { data, error } = await supabase.from('cardio_logs').select('*');
+  if (error) console.error(error);
+  return data || [];
 };
 
-export const deleteCardioLog = (id) => {
-    const logs = getCardioLogs();
-    const updated = logs.filter(l => l.id !== id);
-    localStorage.setItem(CARDIO_KEY, JSON.stringify(updated));
-    return updated;
+export const addCardioLog = async (date, type, duration, distance) => {
+  const userId = await getUser();
+  const { data, error } = await supabase.from('cardio_logs').insert([{
+    user_id: userId,
+    date,
+    type,
+    duration,
+    distance
+  }]).select();
+  if (error) console.error(error);
+  return await getCardioLogs(); 
 };
 
-export const updateCardioLog = (updatedLog) => {
-    const logs = getCardioLogs();
-    const index = logs.findIndex(log => log.id === updatedLog.id);
+export const deleteCardioLog = async (id) => {
+  const { error } = await supabase.from('cardio_logs').delete().eq('id', id);
+  if (error) console.error(error);
+  return await getCardioLogs();
+};
 
-    if (index !== -1) {
-        logs[index] = updatedLog;
-        localStorage.setItem(CARDIO_KEY, JSON.stringify(logs));
-    }
-    return logs;
+export const updateCardioLog = async (log) => {
+  const { data, error } = await supabase
+    .from('cardio_logs')
+    .update({ 
+      date: log.date, 
+      type: log.type, 
+      duration: log.duration, 
+      distance: log.distance 
+    })
+    .eq('id', log.id)
+    .select();
+  if (error) console.error(error);
+  return await getCardioLogs();
 };

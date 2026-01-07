@@ -1,102 +1,98 @@
-import React, { useState } from 'react';
-import ExerciseManager from './components/ExerciseManager';
-import RoutineManager from './components/RoutineManager';
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
+import AuthPage from './components/AuthPage';
+
+// Components
 import DailyView from './components/DailyView';
-import WorkoutLogger from './components/WorkoutLogger';
 import HistoryView from './components/HistoryView';
+import RoutineManager from './components/RoutineManager';
 import TrendsView from './components/TrendsView';
+import WorkoutLogger from './components/WorkoutLogger';
 
-function App() {
-  // Default view is 'today'
-  const [view, setView] = useState('today');
-  
-  // Sub-view for the Manage tab (now only Routines & Exercises)
-  const [manageView, setManageView] = useState('routines'); 
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [view, setView] = useState('daily'); // daily, history, manage, trends, log
 
-  // Helper to style the active tab
-  const getTabClass = (tabName) => {
-    const isActive = view === tabName;
-    // We use min-w-0 and whitespace-nowrap to handle the 5-button layout on small screens
-    return `flex-1 py-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition border-b-2 min-w-0 whitespace-nowrap ${
-      isActive 
-        ? 'border-white text-white' 
-        : 'border-transparent text-zinc-500 hover:text-zinc-300'
-    }`;
+  useEffect(() => {
+    // 1. Check active session on load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // 2. Listen for login/logout events
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
-  return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black">
-      
-      {/* Header */}
-      <header className="p-6 border-b border-zinc-900 flex justify-center sticky top-0 bg-black/95 z-20 backdrop-blur">
-        <h1 className="text-3xl font-black tracking-tighter uppercase italic">
-          Onyx
-        </h1>
-      </header>
+  // If not logged in, show the Auth Page
+  if (!session) {
+    return <AuthPage />;
+  }
 
-      {/* Main Navigation (5 Tabs) */}
-      <div className="flex border-b border-zinc-800 mb-4 bg-zinc-900/30 sticky top-[85px] z-20 backdrop-blur overflow-x-auto no-scrollbar">
-        <button onClick={() => setView('today')} className={getTabClass('today')}>
-          Today
-        </button>
-        <button onClick={() => setView('logger')} className={getTabClass('logger')}>
-          Log
-        </button>
-        <button onClick={() => setView('history')} className={getTabClass('history')}>
-          History
-        </button>
-        <button onClick={() => setView('trends')} className={getTabClass('trends')}>
-          Trends
-        </button>
-        <button onClick={() => setView('manage')} className={getTabClass('manage')}>
-          Manage
-        </button>
+  // --- MAIN APP ---
+  return (
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
+      
+      {/* Top Bar / Sign Out (Visible only on Manage tab for cleanliness, or globally) */}
+      {view === 'manage' && (
+        <div className="max-w-md mx-auto p-4 flex justify-end">
+          <button 
+            onClick={handleLogout}
+            className="text-xs text-red-400 hover:text-red-300 underline"
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+
+      {/* Content Area */}
+      <div className="p-4 pb-24"> {/* Added padding-bottom for navbar */}
+        {view === 'daily' && <DailyView />}
+        {view === 'history' && <HistoryView />}
+        {view === 'manage' && <RoutineManager />}
+        {view === 'trends' && <TrendsView />}
+        {view === 'log' && <WorkoutLogger />}
       </div>
 
-      <main className="p-4 pb-20">
-        
-        {/* 1. Today's Routine View */}
-        {view === 'today' && <DailyView />}
-
-        {/* 2. Manual Logger (The "One-Off" Tab) */}
-        {view === 'logger' && <WorkoutLogger />}
-        
-        {/* 3. History View */}
-        {view === 'history' && <HistoryView />}
-        
-        {/* 4. Trends View */}
-        {view === 'trends' && <TrendsView />}
-
-        {/* 5. Management View (Routines & Exercises) */}
-        {view === 'manage' && (
-          <div>
-            <div className="flex justify-center gap-4 mb-8">
-              <button 
-                onClick={() => setManageView('routines')}
-                className={`px-4 py-1 rounded-full text-xs font-bold transition ${
-                  manageView === 'routines' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Routines
-              </button>
-              <button 
-                onClick={() => setManageView('exercises')}
-                className={`px-4 py-1 rounded-full text-xs font-bold transition ${
-                  manageView === 'exercises' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Exercises
-              </button>
-            </div>
-
-            {manageView === 'routines' && <RoutineManager />}
-            {manageView === 'exercises' && <ExerciseManager />}
-          </div>
-        )}
-
-      </main>
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 safe-area-pb">
+        <div className="max-w-md mx-auto flex justify-around p-3">
+          <NavButton active={view === 'daily'} onClick={() => setView('daily')} icon="📅" label="Today" />
+          <NavButton active={view === 'log'} onClick={() => setView('log')} icon="✍️" label="Log" />
+          <NavButton active={view === 'history'} onClick={() => setView('history')} icon="clock" label="History" />
+          <NavButton active={view === 'trends'} onClick={() => setView('trends')} icon="📈" label="Trends" />
+          <NavButton active={view === 'manage'} onClick={() => setView('manage')} icon="⚙️" label="Manage" />
+        </div>
+      </nav>
     </div>
   );
 }
 
-export default App;
+// Helper for Nav Icons
+function NavButton({ active, onClick, icon, label }) {
+    // Custom SVG icons for cleaner look
+    const icons = {
+        clock: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    };
+
+    return (
+      <button 
+        onClick={onClick}
+        className={`flex flex-col items-center gap-1 transition-colors ${
+          active ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300'
+        }`}
+      >
+        <span className="text-xl h-6 flex items-center">{icons[icon] || icon}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wide">{label}</span>
+      </button>
+    );
+}

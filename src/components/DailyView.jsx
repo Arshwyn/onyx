@@ -6,6 +6,8 @@ import {
 } from '../dataManager';
 
 export default function DailyView() {
+  const [loading, setLoading] = useState(true);
+  
   // --- DATES & NAVIGATION ---
   const [todayDateStr, setTodayDateStr] = useState(''); 
   const [viewDate, setViewDate] = useState(new Date()); 
@@ -53,7 +55,8 @@ export default function DailyView() {
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
 
   // --- CORE DATA LOADER ---
-  const loadView = (targetDate) => {
+  const loadView = async (targetDate) => {
+    setLoading(true);
     const dateStr = getDateStr(targetDate);
     const dayName = DAYS[targetDate.getDay()];
     
@@ -62,28 +65,34 @@ export default function DailyView() {
     const isRest = localStorage.getItem(restKey) === 'true';
     setIsAdHocRest(isRest);
 
-    // 2. Load Weight
-    const weights = getBodyWeights();
+    // 2. Fetch ALL Data (Including Exercises now!)
+    const [weights, cLogs, allLogs, routines, allExercises] = await Promise.all([
+        getBodyWeights(),
+        getCardioLogs(),
+        getLogs(),
+        getRoutines(),
+        getExercises() 
+    ]);
+
+    // 3. Process Weight
     const existingWeight = weights.find(w => w.date === dateStr);
     setViewWeight(existingWeight ? existingWeight.weight : null);
 
-    // 3. Load Logs
-    const cLogs = getCardioLogs();
+    // 4. Process Cardio
     const daysCardio = cLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(daysCardio);
 
-    const allLogs = getLogs();
+    // 5. Process Logs
     const daysLogs = allLogs.filter(log => log.date === dateStr);
-    const doneIds = daysLogs.map(log => String(log.exerciseId));
+    // Support both old local ID format and new DB format (exercise_id)
+    const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
     setCompletedIds(doneIds);
 
-    // 4. DETERMINE ROUTINE (Handle Swaps)
+    // 6. Routine Logic
     const swapKey = `onyx_swap_${dateStr}`;
     const swappedRoutineId = localStorage.getItem(swapKey);
-    const routines = getRoutines();
     
     let routine = null;
-
     if (swappedRoutineId) {
         routine = routines.find(r => String(r.id) === String(swappedRoutineId));
         setIsSwapped(!!routine); 
@@ -99,17 +108,17 @@ export default function DailyView() {
     if (routine) {
       setRoutineCardio(routine.cardio || []);
 
-      const allExercises = getExercises();
       const mergedData = routine.exercises.map(routineEx => {
         const exId = typeof routineEx === 'object' ? routineEx.id : routineEx;
         const targetSets = routineEx.sets || 3; 
         const targetReps = routineEx.reps || 10;
         const fullExercise = allExercises.find(e => String(e.id) === String(exId));
-        return { ...fullExercise, targetSets, targetReps };
-      }).filter(ex => ex && ex.name);
+        return fullExercise ? { ...fullExercise, targetSets, targetReps } : null;
+      }).filter(ex => ex); // Filter out nulls if exercise deleted
 
       setExercises(mergedData);
 
+      // Init Inputs
       const initialInputs = {};
       mergedData.forEach(ex => {
         initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
@@ -123,16 +132,17 @@ export default function DailyView() {
       const historyStats = {};
       mergedData.forEach(ex => {
         const pastLogs = allLogs.filter(l => 
-           String(l.exerciseId) === String(ex.id) && 
+           String(l.exercise_id || l.exerciseId) === String(ex.id) && 
            new Date(l.date) < new Date(dateStr) 
         );
         if (pastLogs.length > 0) {
           pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
           const lastLog = pastLogs[0]; 
-          if (lastLog.sets && lastLog.sets.length > 0) {
-            const bestSet = lastLog.sets.reduce((prev, current) => 
+          const sets = lastLog.sets || [];
+          if (sets.length > 0) {
+            const bestSet = sets.reduce((prev, current) => 
               (Number(current.weight) > Number(prev.weight) ? current : prev)
-            , lastLog.sets[0]);
+            , sets[0]);
             historyStats[ex.id] = `${bestSet.weight} lbs x ${bestSet.reps}`;
           }
         }
@@ -142,6 +152,7 @@ export default function DailyView() {
       setExercises([]);
       setRoutineCardio([]);
     }
+    setLoading(false);
   };
 
   // --- NAVIGATION HANDLERS ---
@@ -159,10 +170,8 @@ export default function DailyView() {
     loadView(now);
   };
 
-  // 1. SAVE THE SWAP
   const handleSwapToToday = () => {
     if (!currentRoutine) return;
-    
     const confirmMsg = `Replace today's workout with ${currentRoutine.name}?`;
     if (window.confirm(confirmMsg)) {
         const now = new Date();
@@ -173,7 +182,6 @@ export default function DailyView() {
     }
   };
 
-  // 2. REVERT THE SWAP
   const handleRevertSchedule = () => {
     if (window.confirm("Revert to the original scheduled routine?")) {
         const dateStr = getDateStr(viewDate);
@@ -195,17 +203,17 @@ export default function DailyView() {
     }
   };
 
-  const handleSaveWeight = () => {
+  const handleSaveWeight = async () => {
     if (!weightInput) return;
     const dateStr = getDateStr(viewDate);
-    addBodyWeight(weightInput, dateStr);
+    await addBodyWeight(weightInput, dateStr);
     setViewWeight(weightInput);
   };
 
-  const handleSaveCardio = () => {
+  const handleSaveCardio = async () => {
     if (!cardioDuration) return alert("Duration is required");
     const dateStr = getDateStr(viewDate);
-    const newLogs = addCardioLog(dateStr, cardioType, cardioDuration, cardioDistance);
+    const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, cardioDistance);
     const todaysCardio = newLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(todaysCardio);
     setCardioDuration('');
@@ -213,17 +221,17 @@ export default function DailyView() {
     setShowCardioForm(false);
   };
 
-  const handleCompletePlannedCardio = (plannedItem) => {
+  const handleCompletePlannedCardio = async (plannedItem) => {
     const dateStr = getDateStr(viewDate);
-    const newLogs = addCardioLog(dateStr, plannedItem.type, plannedItem.duration, plannedItem.distance);
+    const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, plannedItem.distance);
     const todaysCardio = newLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(todaysCardio);
   };
 
-  const handleDeleteCardio = (id) => {
+  const handleDeleteCardio = async (id) => {
     if (confirm("Remove this cardio session?")) {
       const dateStr = getDateStr(viewDate);
-      const newLogs = deleteCardioLog(id);
+      const newLogs = await deleteCardioLog(id);
       const todaysCardio = newLogs.filter(c => c.date === dateStr);
       setViewCardioLogs(todaysCardio);
     }
@@ -242,18 +250,19 @@ export default function DailyView() {
     });
   };
 
-  const handleLogExercise = (exId) => {
+  const handleLogExercise = async (exId) => {
     const setsToLog = setInputs[exId];
     if (!setsToLog) return;
     const validSets = setsToLog.filter(s => s.weight !== '');
     if (validSets.length === 0) return alert("Enter weight for at least one set.");
     
     const dateStr = getDateStr(viewDate);
-    addLog(dateStr, exId, validSets);
-    
+    // Optimistic UI Update
     const strId = String(exId);
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
+
+    await addLog(dateStr, exId, validSets);
   };
 
   const toggleExpand = (exId) => {
@@ -266,111 +275,68 @@ export default function DailyView() {
   };
 
   // --- RENDER HELPERS ---
-
   const viewDateStr = getDateStr(viewDate);
   const isToday = viewDateStr === todayDateStr;
   const dayName = DAYS[viewDate.getDay()];
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
+
+  if (loading) {
+    return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Onyx...</div>;
+  }
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
       
       {/* 1. NAVIGATION HEADER */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
-        
-        {/* Date Nav */}
         <div className="flex justify-between items-center mb-4">
-            {/* Left Chevron */}
-            <button 
-                onClick={() => changeDay(-1)} 
-                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
-            >
+            <button onClick={() => changeDay(-1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
-            
             <div className="text-center">
                 <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center gap-2 justify-center">
                     {formattedDate} 
                     {!isToday && (
-                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">
-                            Today
-                        </button>
+                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">Today</button>
                     )}
                 </div>
             </div>
-
-            {/* Right Chevron */}
-            <button 
-                onClick={() => changeDay(1)} 
-                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
-            >
+            <button onClick={() => changeDay(1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
         </div>
-
-        {/* Routine Name & Actions */}
         <div className="flex justify-between items-end">
             <div>
                 <h1 className="text-3xl font-black italic uppercase">
                     {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
                 </h1>
-                
-                {/* Visual Indicator for Swapped Routine */}
                 {isSwapped && (
                     <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">
-                            Swapped Routine
-                        </span>
-                        <button 
-                            onClick={handleRevertSchedule}
-                            className="text-[10px] text-zinc-400 hover:text-white underline"
-                        >
-                            Revert
-                        </button>
+                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped Routine</span>
+                        <button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button>
                     </div>
                 )}
             </div>
-
-            {/* ACTION BUTTONS */}
             <div className="flex gap-2">
-                {/* Swap Button: Only if viewing ANOTHER day's routine */}
                 {!isToday && !isNoRoutine && !isScheduledRest && (
-                    <button 
-                        onClick={handleSwapToToday}
-                        className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50"
-                    >
-                        Do This Today
-                    </button>
+                    <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>
                 )}
-
-                {/* Rest Button */}
                 {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
-                    <button 
-                        onClick={handleToggleAdHocRest}
-                        className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition"
-                    >
-                        Rest
-                    </button>
+                    <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>
                 )}
             </div>
         </div>
       </div>
 
-      {/* 2. BODY WEIGHT */}
+      {/* 2. WEIGHT */}
       <div className="mb-4">
         {viewWeight ? (
           <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-              </div>
-              <div>
-                <span className="text-xs text-green-500 font-bold uppercase block">Morning Weight</span>
-                <span className="text-white font-bold">{viewWeight} lbs</span>
-              </div>
+              <div className="bg-green-900/20 text-green-500 p-2 rounded-full"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg></div>
+              <div><span className="text-xs text-green-500 font-bold uppercase block">Morning Weight</span><span className="text-white font-bold">{viewWeight} lbs</span></div>
             </div>
           </div>
         ) : (
@@ -384,36 +350,21 @@ export default function DailyView() {
         )}
       </div>
 
-      {/* 3. CARDIO SECTION */}
+      {/* 3. CARDIO */}
       <div className="mb-8">
-        
-        {/* Planned Cardio */}
         {routineCardio.length > 0 && !isAdHocRest && (
             <div className="mb-4">
                 <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
                 <div className="space-y-2">
                     {routineCardio.map((planned) => {
                         const isDone = viewCardioLogs.some(l => l.type === planned.type);
-                        
                         return (
                             <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}>
-                                        <span className="text-xs font-bold">C</span>
-                                    </div>
-                                    <div>
-                                        <span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span>
-                                        <span className="text-white font-bold text-sm">Target: {planned.duration}m</span>
-                                    </div>
+                                    <div className={`p-2 rounded-full ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}><span className="text-xs font-bold">C</span></div>
+                                    <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
                                 </div>
-                                {!isDone && (
-                                    <button 
-                                        onClick={() => handleCompletePlannedCardio(planned)}
-                                        className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200"
-                                    >
-                                        Log
-                                    </button>
-                                )}
+                                {!isDone && <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>}
                                 {isDone && <span className="text-green-500 text-xs font-bold uppercase">Done</span>}
                             </div>
                         );
@@ -421,65 +372,36 @@ export default function DailyView() {
                 </div>
             </div>
         )}
-
-        {/* Logged Cardio */}
         {viewCardioLogs.length > 0 && (
           <div className="space-y-2 mb-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Completed Log</h3>
             {viewCardioLogs.map(cardio => (
               <div key={cardio.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="bg-zinc-800 text-zinc-400 p-2 rounded-full">
-                    <span className="text-xs font-bold">✓</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-zinc-400 font-bold uppercase block">{cardio.type}</span>
-                    <span className="text-zinc-300 text-sm">{cardio.duration} mins</span>
-                  </div>
+                  <div className="bg-zinc-800 text-zinc-400 p-2 rounded-full"><span className="text-xs font-bold">✓</span></div>
+                  <div><span className="text-xs text-zinc-400 font-bold uppercase block">{cardio.type}</span><span className="text-zinc-300 text-sm">{cardio.duration} mins</span></div>
                 </div>
                 <button onClick={() => handleDeleteCardio(cardio.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
               </div>
             ))}
           </div>
         )}
-
-        {/* Ad-Hoc Toggle */}
-        {!isAdHocRest && (
-            !showCardioForm ? (
-            <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">
-                + Log Additional Cardio
-            </button>
-            ) : (
+        {!isAdHocRest && !showCardioForm && (
+            <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
+        )}
+        {showCardioForm && (
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
-                <div className="flex justify-between items-center mb-3">
-                <span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span>
-                <button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button>
-                </div>
+                <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
                 <div className="space-y-3">
-                <div>
-                    <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label>
-                    <select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">
-                    {CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                </div>
-                <div className="flex gap-3">
-                    <div className="flex-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label>
-                    <input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" />
-                    </div>
-                    <div className="flex-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label>
-                    <input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="-" />
-                    </div>
-                </div>
-                <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
+                    <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div className="flex gap-3"><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="-" /></div></div>
+                    <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
                 </div>
             </div>
-            )
         )}
       </div>
 
-      {/* 4. MAIN CONTENT */}
+      {/* 4. MAIN EXERCISES */}
       {isAdHocRest ? (
         <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
@@ -499,7 +421,6 @@ export default function DailyView() {
           <p className="text-xs mt-4">Go to "Manage" to set up a routine.</p>
         </div>
       ) : (
-        /* LIST EXERCISES */
         <div className="space-y-4">
           {exercises.map(ex => {
             const strId = String(ex.id);
