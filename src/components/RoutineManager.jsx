@@ -10,9 +10,10 @@ export default function RoutineManager() {
   // Form State
   const [selectedDay, setSelectedDay] = useState(DAYS[0]);
   const [routineName, setRoutineName] = useState('');
+  const [selectedExercises, setSelectedExercises] = useState([]); // Array of { id, name, targetSets, targetReps }
   
-  // selectedExercises is now an array of objects: { id, name, targetSets, targetReps }
-  const [selectedExercises, setSelectedExercises] = useState([]);
+  // Edit Mode State
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -27,10 +28,8 @@ export default function RoutineManager() {
     const isSelected = selectedExercises.find(item => item.id === ex.id);
     
     if (isSelected) {
-      // Remove it
       setSelectedExercises(selectedExercises.filter(item => item.id !== ex.id));
     } else {
-      // Add it with defaults (3 sets of 10)
       setSelectedExercises([
         ...selectedExercises, 
         { id: ex.id, name: ex.name, targetSets: 3, targetReps: 10 }
@@ -47,10 +46,51 @@ export default function RoutineManager() {
     }));
   };
 
+  const handleEdit = (routine) => {
+    // 1. Enter Edit Mode
+    setEditingId(routine.id);
+    setRoutineName(routine.name);
+    setSelectedDay(routine.day);
+
+    // 2. Reconstruct the selected exercises list with Names + Targets
+    // The routine saves them as { id, sets, reps }
+    // We need { id, name, targetSets, targetReps }
+    const hydratedExercises = routine.exercises.map(savedEx => {
+        // Handle both old format (string ID) and new format (object)
+        const exId = typeof savedEx === 'object' ? savedEx.id : savedEx;
+        const sets = savedEx.sets || 3;
+        const reps = savedEx.reps || 10;
+        
+        // Find the original name from the full list
+        const fullEx = allExercises.find(e => String(e.id) === String(exId));
+        
+        if (!fullEx) return null; // Skip if exercise was deleted
+
+        return {
+            id: fullEx.id,
+            name: fullEx.name,
+            targetSets: sets,
+            targetReps: reps
+        };
+    }).filter(Boolean); // Remove nulls
+
+    setSelectedExercises(hydratedExercises);
+    
+    // Scroll to top to show the form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setRoutineName('');
+    setSelectedExercises([]);
+    setSelectedDay(DAYS[0]);
+  };
+
   const handleSave = () => {
     if (!routineName || selectedExercises.length === 0) return alert("Name and Exercises required");
     
-    // We save the ID and the targets
+    // Prepare data for storage
     const exercisesToSave = selectedExercises.map(ex => ({
       id: ex.id,
       sets: ex.targetSets,
@@ -58,30 +98,37 @@ export default function RoutineManager() {
     }));
 
     saveRoutine({
+      id: editingId, // If null, dataManager creates a new ID. If exists, it updates.
       day: selectedDay,
       name: routineName,
       exercises: exercisesToSave
     });
     
-    // Reset
-    setRoutineName('');
-    setSelectedExercises([]);
+    // Reset Form
+    handleCancelEdit();
     loadData();
-    alert(`Saved routine for ${selectedDay}`);
+    alert(editingId ? "Routine Updated!" : `Saved routine for ${selectedDay}`);
   };
 
   const handleDelete = (id) => {
     if (confirm("Delete this routine?")) {
       deleteRoutine(id);
+      
+      // If we deleted the one we were editing, clear the form
+      if (editingId === id) {
+        handleCancelEdit();
+      }
       loadData();
     }
   };
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
-      <h2 className="text-xl font-bold mb-4 text-gray-300">Routine Builder</h2>
+      <h2 className="text-xl font-bold mb-4 text-gray-300">
+        {editingId ? 'Edit Routine' : 'Routine Builder'}
+      </h2>
 
-      <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-8">
+      <div className={`p-4 rounded-lg border mb-8 transition-colors ${editingId ? 'bg-zinc-800 border-blue-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
         
         {/* Day Selector */}
         <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Day of Week</label>
@@ -108,14 +155,16 @@ export default function RoutineManager() {
           value={routineName}
           onChange={(e) => setRoutineName(e.target.value)}
           placeholder="e.g. Heavy Legs"
-          className="w-full p-2 mb-4 rounded bg-black border border-zinc-700 text-white outline-none"
+          className="w-full p-2 mb-4 rounded bg-black border border-zinc-700 text-white outline-none focus:border-white transition"
         />
 
         {/* Exercise Selector */}
         <label className="block text-xs text-gray-500 uppercase font-bold mb-2">Select Exercises & Targets</label>
         <div className="max-h-64 overflow-y-auto space-y-2 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
           {allExercises.map(ex => {
-            const isSelected = selectedExercises.find(item => item.id === ex.id);
+            // Need to compare IDs as strings to be safe
+            const isSelected = selectedExercises.find(item => String(item.id) === String(ex.id));
+            
             return (
               <div 
                 key={ex.id} 
@@ -123,7 +172,7 @@ export default function RoutineManager() {
                   isSelected ? 'bg-zinc-800 border-zinc-600' : 'hover:bg-zinc-900 border-transparent'
                 }`}
               >
-                {/* Header: Checkbox + Name */}
+                {/* Checkbox + Name */}
                 <div 
                   onClick={() => toggleExercise(ex)}
                   className="flex items-center gap-3 cursor-pointer"
@@ -132,7 +181,7 @@ export default function RoutineManager() {
                   <span className={isSelected ? 'text-white font-bold' : 'text-gray-400'}>{ex.name}</span>
                 </div>
 
-                {/* If Selected: Show Target Inputs */}
+                {/* Inputs (Only if selected) */}
                 {isSelected && (
                   <div className="flex gap-2 mt-2 ml-7">
                     <div className="flex flex-col">
@@ -141,7 +190,7 @@ export default function RoutineManager() {
                         type="number" 
                         value={isSelected.targetSets}
                         onChange={(e) => updateTarget(ex.id, 'targetSets', e.target.value)}
-                        className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center"
+                        className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center outline-none focus:border-blue-400"
                       />
                     </div>
                     <div className="flex flex-col">
@@ -150,7 +199,7 @@ export default function RoutineManager() {
                         type="number" 
                         value={isSelected.targetReps}
                         onChange={(e) => updateTarget(ex.id, 'targetReps', e.target.value)}
-                        className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center"
+                        className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center outline-none focus:border-blue-400"
                       />
                     </div>
                   </div>
@@ -160,26 +209,51 @@ export default function RoutineManager() {
           })}
         </div>
 
-        <button 
-          onClick={handleSave}
-          className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition uppercase tracking-widest text-xs"
-        >
-          Save Routine
-        </button>
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+            {editingId && (
+                <button 
+                    onClick={handleCancelEdit}
+                    className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600 transition uppercase tracking-widest text-xs"
+                >
+                    Cancel
+                </button>
+            )}
+            <button 
+            onClick={handleSave}
+            className={`flex-[2] text-black font-bold py-3 rounded transition uppercase tracking-widest text-xs ${
+                editingId ? 'bg-blue-400 hover:bg-blue-300' : 'bg-white hover:bg-gray-200'
+            }`}
+            >
+            {editingId ? 'Update Routine' : 'Save Routine'}
+            </button>
+        </div>
       </div>
 
-      {/* List Existing */}
+      {/* Existing List */}
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Your Schedule</h3>
       <div className="space-y-3">
         {routines.sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).map(routine => (
-          <div key={routine.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded flex justify-between items-center">
+          <div key={routine.id} className={`bg-zinc-900/50 border p-3 rounded flex justify-between items-center ${editingId === routine.id ? 'border-blue-500 bg-blue-900/10' : 'border-zinc-800'}`}>
             <div>
               <span className="text-xs text-blue-400 font-bold uppercase block">{routine.day}</span>
               <span className="text-white font-bold text-lg">{routine.name}</span>
             </div>
-            <button onClick={() => handleDelete(routine.id)} className="text-red-500 hover:text-red-400 text-sm px-3">
-              ✕
-            </button>
+            
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => handleEdit(routine)}
+                    className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded transition"
+                >
+                    Edit
+                </button>
+                <button 
+                    onClick={() => handleDelete(routine.id)} 
+                    className="text-xs bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-3 py-2 rounded transition"
+                >
+                    ✕
+                </button>
+            </div>
           </div>
         ))}
       </div>
