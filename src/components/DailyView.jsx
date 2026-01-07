@@ -6,11 +6,15 @@ export default function DailyView() {
   const [todayExercises, setTodayExercises] = useState([]);
   const [currentDay, setCurrentDay] = useState('');
   
-  // setInputs holds the data. setSetInputs updates it.
+  // Data for inputs
   const [setInputs, setSetInputs] = useState({});
   
+  // Visual States
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
+  
+  // New State: Store "Last Time" stats
+  const [lastPerformances, setLastPerformances] = useState({});
 
   useEffect(() => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -20,10 +24,13 @@ export default function DailyView() {
     
     setCurrentDay(todayDayName);
 
-    // 1. Check for existing logs
+    // 1. Load Logs
     const allLogs = getLogs();
+    
+    // Check what is done TODAY
     const todaysLogs = allLogs.filter(log => log.date === todayDateString);
-    const doneIds = todaysLogs.map(log => log.exerciseId);
+    // Convert IDs to strings for safe comparison
+    const doneIds = todaysLogs.map(log => String(log.exerciseId));
     setCompletedIds(doneIds);
 
     // 2. Load Routine
@@ -39,7 +46,7 @@ export default function DailyView() {
         const targetSets = routineEx.sets || 3; 
         const targetReps = routineEx.reps || 10;
         
-        const fullExercise = allExercises.find(e => e.id === exId);
+        const fullExercise = allExercises.find(e => String(e.id) === String(exId));
         return { ...fullExercise, targetSets, targetReps };
       }).filter(ex => ex && ex.name);
 
@@ -54,6 +61,32 @@ export default function DailyView() {
         }));
       });
       setSetInputs(initialInputs);
+
+      // 4. Calculate "Last Time" Stats
+      const historyStats = {};
+      mergedData.forEach(ex => {
+        // FIX: Compare IDs as Strings to avoid mismatches (number vs string)
+        const pastLogs = allLogs.filter(l => 
+          String(l.exerciseId) === String(ex.id) && 
+          l.date !== todayDateString // Don't show today's log as "Last"
+        );
+        
+        if (pastLogs.length > 0) {
+          // Sort by date descending (newest first)
+          pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+          const lastLog = pastLogs[0]; 
+
+          // Find the "Best Set" (Max Weight)
+          if (lastLog.sets && lastLog.sets.length > 0) {
+            const bestSet = lastLog.sets.reduce((prev, current) => 
+              (Number(current.weight) > Number(prev.weight) ? current : prev)
+            , lastLog.sets[0]);
+            
+            historyStats[ex.id] = `${bestSet.weight} lbs x ${bestSet.reps}`;
+          }
+        }
+      });
+      setLastPerformances(historyStats);
     }
   }, []);
 
@@ -72,13 +105,10 @@ export default function DailyView() {
   };
 
   const handleLogExercise = (exId) => {
-    // FIX IS HERE: Use 'setInputs', NOT 'setSetInputs'
-    const setsToLog = setInputs[exId]; 
-    
-    if (!setsToLog) return; // Safety check
+    const setsToLog = setInputs[exId];
+    if (!setsToLog) return;
 
     const validSets = setsToLog.filter(s => s.weight !== '');
-    
     if (validSets.length === 0) return alert("Please enter weight for at least one set.");
 
     addLog(
@@ -87,20 +117,19 @@ export default function DailyView() {
       validSets 
     );
 
-    // Mark as complete
-    if (!completedIds.includes(exId)) {
-      setCompletedIds([...completedIds, exId]);
+    const strId = String(exId);
+    if (!completedIds.includes(strId)) {
+      setCompletedIds([...completedIds, strId]);
     }
-    
-    // Force collapse
-    setExpandedIds(expandedIds.filter(id => id !== exId));
+    setExpandedIds(expandedIds.filter(id => id !== strId));
   };
 
   const toggleExpand = (exId) => {
-    if (expandedIds.includes(exId)) {
-      setExpandedIds(expandedIds.filter(id => id !== exId));
+    const strId = String(exId);
+    if (expandedIds.includes(strId)) {
+      setExpandedIds(expandedIds.filter(id => id !== strId));
     } else {
-      setExpandedIds([...expandedIds, exId]);
+      setExpandedIds([...expandedIds, strId]);
     }
   };
 
@@ -123,10 +152,11 @@ export default function DailyView() {
 
       <div className="space-y-4">
         {todayExercises.map(ex => {
-          const isComplete = completedIds.includes(ex.id);
-          const isExpanded = expandedIds.includes(ex.id);
-          
+          const strId = String(ex.id);
+          const isComplete = completedIds.includes(strId);
+          const isExpanded = expandedIds.includes(strId);
           const showBody = !isComplete || isExpanded;
+          const lastStats = lastPerformances[ex.id];
 
           return (
             <div 
@@ -157,7 +187,7 @@ export default function DailyView() {
                   <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
                 </div>
                 
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end">
                   {isComplete ? (
                     <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
                       {isExpanded ? 'Hide' : 'Show'} 
@@ -165,10 +195,22 @@ export default function DailyView() {
                     </div>
                   ) : (
                     <>
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span>
-                      <span className="text-sm font-mono text-blue-400 font-bold">
-                        {ex.targetSets} x {ex.targetReps}
-                      </span>
+                      <div className="mb-1">
+                        <span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span>
+                        <span className="text-sm font-mono text-blue-400 font-bold">
+                          {ex.targetSets} x {ex.targetReps}
+                        </span>
+                      </div>
+
+                      {/* Display LAST stats if available */}
+                      {lastStats && (
+                        <div>
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span>
+                          <span className="text-sm font-mono text-gray-300">
+                            {lastStats}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
