@@ -6,75 +6,98 @@ import {
 } from '../dataManager';
 
 export default function DailyView() {
-  const [todayRoutine, setTodayRoutine] = useState(null);
-  const [todayExercises, setTodayExercises] = useState([]);
-  const [currentDay, setCurrentDay] = useState('');
+  // --- DATES & NAVIGATION ---
+  const [todayDateStr, setTodayDateStr] = useState(''); 
+  const [viewDate, setViewDate] = useState(new Date()); 
   
-  // Exercise State
+  // --- DATA STATE ---
+  const [currentRoutine, setCurrentRoutine] = useState(null); 
+  const [exercises, setExercises] = useState([]); 
+  
+  // --- INPUT STATES ---
   const [setInputs, setSetInputs] = useState({});
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   const [lastPerformances, setLastPerformances] = useState({});
 
-  // Body Weight State
-  const [todayWeight, setTodayWeight] = useState(null); 
+  // --- BODY WEIGHT ---
+  const [viewWeight, setViewWeight] = useState(null); 
   const [weightInput, setWeightInput] = useState('');
 
-  // Cardio State
-  const [todayCardioLogs, setTodayCardioLogs] = useState([]); 
+  // --- CARDIO ---
+  const [viewCardioLogs, setViewCardioLogs] = useState([]); 
   const [routineCardio, setRoutineCardio] = useState([]);     
   
-  // Ad-Hoc Cardio Form State
+  // Cardio Form
   const [cardioType, setCardioType] = useState('Run');
   const [cardioDuration, setCardioDuration] = useState(''); 
   const [cardioDistance, setCardioDistance] = useState(''); 
   const [showCardioForm, setShowCardioForm] = useState(false);
 
-  // Rest Day State
+  // --- REST DAY ---
   const [isAdHocRest, setIsAdHocRest] = useState(false);
-  const [todayDate, setTodayDate] = useState('');
+
+  // --- SWAP STATE ---
+  const [isSwapped, setIsSwapped] = useState(false); 
 
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   useEffect(() => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dateObj = new Date();
-    const dayName = days[dateObj.getDay()];
-    const dateStr = dateObj.toISOString().split('T')[0];
-    
-    setCurrentDay(dayName);
-    setTodayDate(dateStr);
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    setTodayDateStr(dateStr);
+    loadView(now);
+  }, []);
 
+  const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
+
+  // --- CORE DATA LOADER ---
+  const loadView = (targetDate) => {
+    const dateStr = getDateStr(targetDate);
+    const dayName = DAYS[targetDate.getDay()];
+    
     // 1. Check Rest
     const restKey = `onyx_rest_${dateStr}`;
-    if (localStorage.getItem(restKey) === 'true') setIsAdHocRest(true);
+    const isRest = localStorage.getItem(restKey) === 'true';
+    setIsAdHocRest(isRest);
 
     // 2. Load Weight
     const weights = getBodyWeights();
     const existingWeight = weights.find(w => w.date === dateStr);
-    if (existingWeight) setTodayWeight(existingWeight.weight);
+    setViewWeight(existingWeight ? existingWeight.weight : null);
 
-    // 3. Load Completed Cardio Logs
+    // 3. Load Logs
     const cLogs = getCardioLogs();
-    const todaysCardio = cLogs.filter(c => c.date === dateStr);
-    setTodayCardioLogs(todaysCardio);
+    const daysCardio = cLogs.filter(c => c.date === dateStr);
+    setViewCardioLogs(daysCardio);
 
-    // 4. Load Lifting Logs
     const allLogs = getLogs();
-    const todaysLogs = allLogs.filter(log => log.date === dateStr);
-    const doneIds = todaysLogs.map(log => String(log.exerciseId));
+    const daysLogs = allLogs.filter(log => log.date === dateStr);
+    const doneIds = daysLogs.map(log => String(log.exerciseId));
     setCompletedIds(doneIds);
 
-    // 5. Load Routine & Planned Cardio
+    // 4. DETERMINE ROUTINE (Handle Swaps)
+    const swapKey = `onyx_swap_${dateStr}`;
+    const swappedRoutineId = localStorage.getItem(swapKey);
     const routines = getRoutines();
-    const routine = routines.find(r => r.day === dayName);
+    
+    let routine = null;
+
+    if (swappedRoutineId) {
+        routine = routines.find(r => String(r.id) === String(swappedRoutineId));
+        setIsSwapped(!!routine); 
+    } 
+
+    if (!routine) {
+        routine = routines.find(r => r.day === dayName);
+        setIsSwapped(false);
+    }
+
+    setCurrentRoutine(routine || null);
     
     if (routine) {
-      setTodayRoutine(routine);
-      
-      if (routine.cardio) {
-        setRoutineCardio(routine.cardio);
-      }
+      setRoutineCardio(routine.cardio || []);
 
       const allExercises = getExercises();
       const mergedData = routine.exercises.map(routineEx => {
@@ -85,7 +108,7 @@ export default function DailyView() {
         return { ...fullExercise, targetSets, targetReps };
       }).filter(ex => ex && ex.name);
 
-      setTodayExercises(mergedData);
+      setExercises(mergedData);
 
       const initialInputs = {};
       mergedData.forEach(ex => {
@@ -96,10 +119,13 @@ export default function DailyView() {
       });
       setSetInputs(initialInputs);
 
-      // Calc History stats
+      // History Stats
       const historyStats = {};
       mergedData.forEach(ex => {
-        const pastLogs = allLogs.filter(l => String(l.exerciseId) === String(ex.id) && l.date !== dateStr);
+        const pastLogs = allLogs.filter(l => 
+           String(l.exerciseId) === String(ex.id) && 
+           new Date(l.date) < new Date(dateStr) 
+        );
         if (pastLogs.length > 0) {
           pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
           const lastLog = pastLogs[0]; 
@@ -112,48 +138,94 @@ export default function DailyView() {
         }
       });
       setLastPerformances(historyStats);
+    } else {
+      setExercises([]);
+      setRoutineCardio([]);
     }
-  }, []);
+  };
+
+  // --- NAVIGATION HANDLERS ---
+
+  const changeDay = (offset) => {
+    const newDate = new Date(viewDate);
+    newDate.setDate(viewDate.getDate() + offset);
+    setViewDate(newDate);
+    loadView(newDate);
+  };
+
+  const jumpToToday = () => {
+    const now = new Date();
+    setViewDate(now);
+    loadView(now);
+  };
+
+  // 1. SAVE THE SWAP
+  const handleSwapToToday = () => {
+    if (!currentRoutine) return;
+    
+    const confirmMsg = `Replace today's workout with ${currentRoutine.name}?`;
+    if (window.confirm(confirmMsg)) {
+        const now = new Date();
+        const todayStr = getDateStr(now);
+        localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id);
+        setViewDate(now);
+        loadView(now);
+    }
+  };
+
+  // 2. REVERT THE SWAP
+  const handleRevertSchedule = () => {
+    if (window.confirm("Revert to the original scheduled routine?")) {
+        const dateStr = getDateStr(viewDate);
+        localStorage.removeItem(`onyx_swap_${dateStr}`);
+        loadView(viewDate);
+    }
+  };
 
   // --- ACTIONS ---
 
   const handleToggleAdHocRest = () => {
+    const dateStr = getDateStr(viewDate);
     const newState = !isAdHocRest;
     setIsAdHocRest(newState);
     if (newState) {
-      localStorage.setItem(`onyx_rest_${todayDate}`, 'true');
+      localStorage.setItem(`onyx_rest_${dateStr}`, 'true');
     } else {
-      localStorage.removeItem(`onyx_rest_${todayDate}`);
+      localStorage.removeItem(`onyx_rest_${dateStr}`);
     }
   };
 
   const handleSaveWeight = () => {
     if (!weightInput) return;
-    addBodyWeight(weightInput, todayDate);
-    setTodayWeight(weightInput);
+    const dateStr = getDateStr(viewDate);
+    addBodyWeight(weightInput, dateStr);
+    setViewWeight(weightInput);
   };
 
   const handleSaveCardio = () => {
     if (!cardioDuration) return alert("Duration is required");
-    const newLogs = addCardioLog(todayDate, cardioType, cardioDuration, cardioDistance);
-    const todaysCardio = newLogs.filter(c => c.date === todayDate);
-    setTodayCardioLogs(todaysCardio);
+    const dateStr = getDateStr(viewDate);
+    const newLogs = addCardioLog(dateStr, cardioType, cardioDuration, cardioDistance);
+    const todaysCardio = newLogs.filter(c => c.date === dateStr);
+    setViewCardioLogs(todaysCardio);
     setCardioDuration('');
     setCardioDistance('');
     setShowCardioForm(false);
   };
 
   const handleCompletePlannedCardio = (plannedItem) => {
-    const newLogs = addCardioLog(todayDate, plannedItem.type, plannedItem.duration, plannedItem.distance);
-    const todaysCardio = newLogs.filter(c => c.date === todayDate);
-    setTodayCardioLogs(todaysCardio);
+    const dateStr = getDateStr(viewDate);
+    const newLogs = addCardioLog(dateStr, plannedItem.type, plannedItem.duration, plannedItem.distance);
+    const todaysCardio = newLogs.filter(c => c.date === dateStr);
+    setViewCardioLogs(todaysCardio);
   };
 
   const handleDeleteCardio = (id) => {
     if (confirm("Remove this cardio session?")) {
+      const dateStr = getDateStr(viewDate);
       const newLogs = deleteCardioLog(id);
-      const todaysCardio = newLogs.filter(c => c.date === todayDate);
-      setTodayCardioLogs(todaysCardio);
+      const todaysCardio = newLogs.filter(c => c.date === dateStr);
+      setViewCardioLogs(todaysCardio);
     }
   };
 
@@ -161,7 +233,7 @@ export default function DailyView() {
     setSetInputs(prev => {
       const currentSets = [...prev[exId]];
       currentSets[index] = { ...currentSets[index], [field]: value };
-      if (index === 0) {
+      if (index === 0) { 
         for (let i = 1; i < currentSets.length; i++) {
           currentSets[i] = { ...currentSets[i], [field]: value };
         }
@@ -174,8 +246,11 @@ export default function DailyView() {
     const setsToLog = setInputs[exId];
     if (!setsToLog) return;
     const validSets = setsToLog.filter(s => s.weight !== '');
-    if (validSets.length === 0) return alert("Please enter weight for at least one set.");
-    addLog(todayDate, exId, validSets);
+    if (validSets.length === 0) return alert("Enter weight for at least one set.");
+    
+    const dateStr = getDateStr(viewDate);
+    addLog(dateStr, exId, validSets);
+    
     const strId = String(exId);
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
@@ -190,30 +265,103 @@ export default function DailyView() {
     }
   };
 
-  // --- RENDER ---
-  
-  const isScheduledRest = todayRoutine && todayRoutine.exercises.length === 0 && (!todayRoutine.cardio || todayRoutine.cardio.length === 0);
-  const isNoRoutine = !todayRoutine;
+  // --- RENDER HELPERS ---
+
+  const viewDateStr = getDateStr(viewDate);
+  const isToday = viewDateStr === todayDateStr;
+  const dayName = DAYS[viewDate.getDay()];
+  const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
+  const isNoRoutine = !currentRoutine;
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
       
-      {/* Header */}
-      <div className="mb-6 border-b border-zinc-800 pb-4 flex justify-between items-end">
-        <div>
-          <h2 className="text-sm text-blue-400 font-bold uppercase tracking-wider">{currentDay}</h2>
-          <h1 className="text-3xl font-black italic uppercase">
-            {isAdHocRest ? 'Rest Day' : (todayRoutine ? todayRoutine.name : 'No Plan')}
-          </h1>
+      {/* 1. NAVIGATION HEADER */}
+      <div className="mb-6 border-b border-zinc-800 pb-4">
+        
+        {/* Date Nav */}
+        <div className="flex justify-between items-center mb-4">
+            {/* Left Chevron */}
+            <button 
+                onClick={() => changeDay(-1)} 
+                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            
+            <div className="text-center">
+                <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center gap-2 justify-center">
+                    {formattedDate} 
+                    {!isToday && (
+                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">
+                            Today
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Right Chevron */}
+            <button 
+                onClick={() => changeDay(1)} 
+                className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
         </div>
-        {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
-          <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Take Rest Day</button>
-        )}
+
+        {/* Routine Name & Actions */}
+        <div className="flex justify-between items-end">
+            <div>
+                <h1 className="text-3xl font-black italic uppercase">
+                    {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
+                </h1>
+                
+                {/* Visual Indicator for Swapped Routine */}
+                {isSwapped && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">
+                            Swapped Routine
+                        </span>
+                        <button 
+                            onClick={handleRevertSchedule}
+                            className="text-[10px] text-zinc-400 hover:text-white underline"
+                        >
+                            Revert
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex gap-2">
+                {/* Swap Button: Only if viewing ANOTHER day's routine */}
+                {!isToday && !isNoRoutine && !isScheduledRest && (
+                    <button 
+                        onClick={handleSwapToToday}
+                        className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50"
+                    >
+                        Do This Today
+                    </button>
+                )}
+
+                {/* Rest Button */}
+                {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
+                    <button 
+                        onClick={handleToggleAdHocRest}
+                        className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition"
+                    >
+                        Rest
+                    </button>
+                )}
+            </div>
+        </div>
       </div>
 
-      {/* 1. BODY WEIGHT */}
+      {/* 2. BODY WEIGHT */}
       <div className="mb-4">
-        {todayWeight ? (
+        {viewWeight ? (
           <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
@@ -221,7 +369,7 @@ export default function DailyView() {
               </div>
               <div>
                 <span className="text-xs text-green-500 font-bold uppercase block">Morning Weight</span>
-                <span className="text-white font-bold">{todayWeight} lbs</span>
+                <span className="text-white font-bold">{viewWeight} lbs</span>
               </div>
             </div>
           </div>
@@ -236,16 +384,16 @@ export default function DailyView() {
         )}
       </div>
 
-      {/* 2. CARDIO SECTION */}
+      {/* 3. CARDIO SECTION */}
       <div className="mb-8">
         
-        {/* A. PLANNED CARDIO (Hidden if taking Ad-Hoc Rest Day) */}
+        {/* Planned Cardio */}
         {routineCardio.length > 0 && !isAdHocRest && (
             <div className="mb-4">
                 <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
                 <div className="space-y-2">
                     {routineCardio.map((planned) => {
-                        const isDone = todayCardioLogs.some(l => l.type === planned.type);
+                        const isDone = viewCardioLogs.some(l => l.type === planned.type);
                         
                         return (
                             <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
@@ -274,11 +422,11 @@ export default function DailyView() {
             </div>
         )}
 
-        {/* B. LOGGED CARDIO LIST */}
-        {todayCardioLogs.length > 0 && (
+        {/* Logged Cardio */}
+        {viewCardioLogs.length > 0 && (
           <div className="space-y-2 mb-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Completed Log</h3>
-            {todayCardioLogs.map(cardio => (
+            {viewCardioLogs.map(cardio => (
               <div key={cardio.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="bg-zinc-800 text-zinc-400 p-2 rounded-full">
@@ -295,7 +443,7 @@ export default function DailyView() {
           </div>
         )}
 
-        {/* C. AD-HOC TOGGLE (Hidden if Rest Day) */}
+        {/* Ad-Hoc Toggle */}
         {!isAdHocRest && (
             !showCardioForm ? (
             <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">
@@ -331,7 +479,7 @@ export default function DailyView() {
         )}
       </div>
 
-      {/* 3. WORKOUT LIST OR REST */}
+      {/* 4. MAIN CONTENT */}
       {isAdHocRest ? (
         <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
@@ -347,13 +495,13 @@ export default function DailyView() {
         </div>
       ) : isNoRoutine ? (
         <div className="text-center mt-10 text-gray-500">
-          <p>No routine scheduled for today.</p>
+          <p>No routine scheduled for {dayName}.</p>
           <p className="text-xs mt-4">Go to "Manage" to set up a routine.</p>
         </div>
       ) : (
         /* LIST EXERCISES */
         <div className="space-y-4">
-          {todayExercises.map(ex => {
+          {exercises.map(ex => {
             const strId = String(ex.id);
             const isComplete = completedIds.includes(strId);
             const isExpanded = expandedIds.includes(strId);
