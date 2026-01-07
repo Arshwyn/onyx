@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { updateUserSettings } from '../dataManager'; // Import
 
 export default function SettingsView({ onNavigate }) {
   const [weightUnit, setWeightUnit] = useState('lbs');
@@ -8,41 +9,45 @@ export default function SettingsView({ onNavigate }) {
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
-    // Load saved settings or defaults
+    // Load local storage first for speed
     setWeightUnit(localStorage.getItem('onyx_unit_weight') || 'lbs');
     setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
     
     const savedTimer = localStorage.getItem('onyx_timer_incs');
     if (savedTimer) setTimerIncs(JSON.parse(savedTimer));
 
-    // Get User Email
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserEmail(user.email);
     });
   }, []);
 
-  const saveSetting = (key, value) => {
-    localStorage.setItem(key, value);
-    // Dispatch event so other components (like DailyView) update instantly
-    window.dispatchEvent(new Event('storage'));
-  };
-
   const handleWeightChange = (unit) => {
     setWeightUnit(unit);
-    saveSetting('onyx_unit_weight', unit);
+    // 1. Update LocalStorage (Instant UI)
+    localStorage.setItem('onyx_unit_weight', unit);
+    window.dispatchEvent(new Event('storage'));
+    
+    // 2. Persist to DB (Background)
+    updateUserSettings({ weight_unit: unit });
   };
 
   const handleMeasureChange = (unit) => {
     setMeasureUnit(unit);
-    saveSetting('onyx_unit_measure', unit);
+    localStorage.setItem('onyx_unit_measure', unit);
+    window.dispatchEvent(new Event('storage'));
+    
+    updateUserSettings({ measure_unit: unit });
   };
 
   const handleTimerChange = (index, value) => {
     const newIncs = [...timerIncs];
     newIncs[index] = parseInt(value) || 0;
     setTimerIncs(newIncs);
+    
     localStorage.setItem('onyx_timer_incs', JSON.stringify(newIncs));
     window.dispatchEvent(new Event('storage'));
+    
+    updateUserSettings({ timer_increments: newIncs });
   };
 
   const handleLogout = async () => {
@@ -58,7 +63,7 @@ export default function SettingsView({ onNavigate }) {
         <p className="text-zinc-500 text-xs">{userEmail}</p>
       </div>
 
-      {/* 1. Routine Manager Link */}
+      {/* 1. Routines */}
       <div className="mb-6">
         <label className="text-xs text-blue-400 font-bold uppercase mb-2 block">Programming</label>
         <button 
@@ -78,44 +83,30 @@ export default function SettingsView({ onNavigate }) {
         </button>
       </div>
 
-      {/* 2. Unit Preferences */}
+      {/* 2. Units */}
       <div className="mb-6">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Display Units</label>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
             
-            {/* Weight Row */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Weight</span>
                 <div className="flex bg-black p-1 rounded">
-                    <button 
-                        onClick={() => handleWeightChange('lbs')}
-                        className={`px-3 py-1 rounded text-xs font-bold transition ${weightUnit === 'lbs' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >LBS</button>
-                    <button 
-                        onClick={() => handleWeightChange('kg')}
-                        className={`px-3 py-1 rounded text-xs font-bold transition ${weightUnit === 'kg' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >KG</button>
+                    <button onClick={() => handleWeightChange('lbs')} className={`px-3 py-1 rounded text-xs font-bold transition ${weightUnit === 'lbs' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>LBS</button>
+                    <button onClick={() => handleWeightChange('kg')} className={`px-3 py-1 rounded text-xs font-bold transition ${weightUnit === 'kg' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>KG</button>
                 </div>
             </div>
 
-            {/* Distance Row */}
             <div className="p-4 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Measurements</span>
                 <div className="flex bg-black p-1 rounded">
-                    <button 
-                        onClick={() => handleMeasureChange('in')}
-                        className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'in' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >IN</button>
-                    <button 
-                        onClick={() => handleMeasureChange('cm')}
-                        className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'cm' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >CM</button>
+                    <button onClick={() => handleMeasureChange('in')} className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'in' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>IN</button>
+                    <button onClick={() => handleMeasureChange('cm')} className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'cm' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>CM</button>
                 </div>
             </div>
         </div>
       </div>
 
-      {/* 3. Timer Configuration */}
+      {/* 3. Timer Defaults */}
       <div className="mb-8">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Timer Quick-Adds (Seconds)</label>
         <div className="grid grid-cols-3 gap-3">
@@ -133,7 +124,7 @@ export default function SettingsView({ onNavigate }) {
         </div>
       </div>
 
-      {/* 4. Logout */}
+      {/* 4. Account */}
       <div className="border-t border-zinc-800 pt-6">
         <button 
           onClick={handleLogout}

@@ -211,3 +211,33 @@ export const deleteCircumference = async (id) => {
     const { error } = await supabase.from('circumferences').delete().eq('id', id);
     if (error) console.error(error);
 };
+
+export const getUserSettings = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "Row not found"
+        console.error('Error fetching settings:', error);
+        return null;
+    }
+
+    return data; // Returns null if no settings row exists yet
+};
+
+export const updateUserSettings = async (settings) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // settings object should look like: { weight_unit: 'kg', measure_unit: 'cm', timer_increments: [30,60,90] }
+    const { error } = await supabase
+        .from('user_settings')
+        .upsert({ user_id: user.id, ...settings });
+
+    if (error) console.error('Error updating settings:', error);
+};
