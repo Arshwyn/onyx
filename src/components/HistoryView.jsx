@@ -3,12 +3,18 @@ import {
   getLogs, getExercises, deleteLog, updateLog,         
   getCardioLogs, deleteCardioLog, updateCardioLog      
 } from '../dataManager';
+import ConfirmModal from './ConfirmModal'; // IMPORT
 
 export default function HistoryView() {
   const [loading, setLoading] = useState(true);
   
+  // --- MODAL STATE ---
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
+  });
+
   // --- SETTINGS STATE ---
-  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+  const [weightUnit, setWeightUnit] = useState('lbs'); 
 
   const [combinedHistory, setCombinedHistory] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -20,7 +26,6 @@ export default function HistoryView() {
   useEffect(() => {
     loadData();
 
-    // Load Settings (Force lowercase)
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
     };
@@ -28,6 +33,10 @@ export default function HistoryView() {
     window.addEventListener('storage', loadSettings);
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
+
+  const openConfirm = (title, message, onConfirm, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -53,16 +62,22 @@ export default function HistoryView() {
     setLoading(false);
   };
 
-  const handleDelete = async (item) => {
+  const handleDelete = (item) => {
     const confirmMsg = item.dataType === 'lift' ? "Delete this workout?" : "Delete this cardio session?"; 
-    if (window.confirm(confirmMsg)) {
-      if (item.dataType === 'lift') {
-        await deleteLog(item.id);
-      } else {
-        await deleteCardioLog(item.id);
-      }
-      loadData(); 
-    }
+    // USE CUSTOM MODAL
+    openConfirm(
+        "Delete Entry?",
+        confirmMsg,
+        async () => {
+            if (item.dataType === 'lift') {
+                await deleteLog(item.id);
+            } else {
+                await deleteCardioLog(item.id);
+            }
+            loadData(); 
+        },
+        true
+    );
   };
 
   const startEditing = (log) => {
@@ -127,6 +142,17 @@ export default function HistoryView() {
 
   return (
     <div className="w-full max-w-md mx-auto text-white pb-10 overflow-x-hidden">
+      
+      {/* MOUNT MODAL */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        isDestructive={modalConfig.isDestructive}
+      />
+
       <div className="flex justify-between items-center mb-6 px-1">
         <h2 className="text-xl font-bold text-gray-300">History</h2>
         <button onClick={downloadCSV} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded border border-zinc-700 transition">

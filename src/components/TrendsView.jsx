@@ -4,14 +4,20 @@ import {
   getLogs, getExercises,
   getCircumferences, addCircumference, deleteCircumference 
 } from '../dataManager';
+import ConfirmModal from './ConfirmModal'; // IMPORT
 
 export default function TrendsView() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('exercises'); 
   
+  // --- MODAL STATE ---
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
+  });
+
   // --- SETTINGS STATE ---
-  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
-  const [measureUnit, setMeasureUnit] = useState('in'); // Default lowercase
+  const [weightUnit, setWeightUnit] = useState('lbs'); 
+  const [measureUnit, setMeasureUnit] = useState('in'); 
 
   // --- STATE: EXERCISES ---
   const [exercises, setExercises] = useState([]);
@@ -35,7 +41,6 @@ export default function TrendsView() {
   useEffect(() => {
     loadAllData();
 
-    // Load Settings (Force lowercase)
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
         setMeasureUnit((localStorage.getItem('onyx_unit_measure') || 'in').toLowerCase());
@@ -53,6 +58,10 @@ export default function TrendsView() {
       filterMeasurements(bodyPart);
     }
   }, [mode, selectedExId, bodyPart, measurementData]);
+
+  const openConfirm = (title, message, onConfirm, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
+  };
 
   const loadAllData = async () => {
     setLoading(true);
@@ -103,12 +112,18 @@ export default function TrendsView() {
     setMeasurementData(mData);
   };
 
-  const handleDeleteMeasurement = async (id) => {
-    if (confirm("Delete this measurement?")) {
-      await deleteCircumference(id);
-      const mData = await getCircumferences();
-      setMeasurementData(mData);
-    }
+  const handleDeleteMeasurement = (id) => {
+    // USE CUSTOM MODAL
+    openConfirm(
+        "Delete Measurement?",
+        "Are you sure you want to delete this measurement?",
+        async () => {
+            await deleteCircumference(id);
+            const mData = await getCircumferences();
+            setMeasurementData(mData);
+        },
+        true
+    );
   };
 
   const handleSaveWeight = async () => {
@@ -120,13 +135,19 @@ export default function TrendsView() {
     setBodyData(bData);
   };
 
-  const handleDeleteWeight = async (id) => {
-    if (confirm("Delete this entry?")) {
-      await deleteBodyWeight(id);
-      const bData = await getBodyWeights();
-      bData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      setBodyData(bData);
-    }
+  const handleDeleteWeight = (id) => {
+    // USE CUSTOM MODAL
+    openConfirm(
+        "Delete Weight Entry?",
+        "Are you sure you want to delete this weight log?",
+        async () => {
+            await deleteBodyWeight(id);
+            const bData = await getBodyWeights();
+            bData.sort((a, b) => new Date(a.date) - new Date(b.date));
+            setBodyData(bData);
+        },
+        true
+    );
   };
 
   const renderChart = (dataPoints) => {
@@ -177,6 +198,16 @@ export default function TrendsView() {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
+      {/* MOUNT MODAL */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        isDestructive={modalConfig.isDestructive}
+      />
+
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase mb-4">Trends</h1>
         <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
@@ -200,7 +231,6 @@ export default function TrendsView() {
              {[...exerciseData].reverse().map((entry, idx) => (
                <div key={idx} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                  <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
-                 {/* UPDATED: Lowercase Unit */}
                  <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
                </div>
              ))}
@@ -218,7 +248,6 @@ export default function TrendsView() {
               </div>
               <div className="flex-1">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Weight</label>
-                {/* UPDATED: Lowercase Placeholder */}
                 <input type="number" value={inputWeight} onChange={(e) => setInputWeight(e.target.value)} placeholder={weightUnit.toLowerCase()} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
               <button onClick={handleSaveWeight} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
@@ -231,7 +260,6 @@ export default function TrendsView() {
               <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
-                  {/* UPDATED: Lowercase Unit */}
                   <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
                   <button onClick={() => handleDeleteWeight(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
                 </div>
@@ -257,7 +285,6 @@ export default function TrendsView() {
               </div>
               <div className="flex-1 min-w-0">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Value</label>
-                {/* UPDATED: Lowercase Placeholder */}
                 <input type="number" value={inputMeasurement} onChange={(e) => setInputMeasurement(e.target.value)} placeholder={measureUnit.toLowerCase()} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm" />
               </div>
               <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 py-2 rounded h-[38px] text-sm hover:bg-gray-200">Log</button>
@@ -272,7 +299,6 @@ export default function TrendsView() {
               <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
-                  {/* UPDATED: Lowercase Unit */}
                   <span className="font-bold text-white">{entry.measurement} <span className="text-xs text-zinc-600 font-normal">{measureUnit.toLowerCase()}</span></span>
                   <button onClick={() => handleDeleteMeasurement(entry.id)} className="text-zinc-600 hover:text-red-500 transition">✕</button>
                 </div>

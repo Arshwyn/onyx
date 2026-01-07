@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { getExercises, addLog, addCardioLog } from '../dataManager';
+import ConfirmModal from './ConfirmModal'; // IMPORT
 
 export default function WorkoutLogger() {
   const [mode, setMode] = useState('lifting');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // --- MODAL STATE ---
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
+  });
+
   // --- SETTINGS STATE ---
-  const [weightUnit, setWeightUnit] = useState('lbs'); // Default lowercase
+  const [weightUnit, setWeightUnit] = useState('lbs'); 
 
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
@@ -27,7 +33,6 @@ export default function WorkoutLogger() {
     };
     fetchEx();
 
-    // Load Settings (Force lowercase)
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
     };
@@ -35,6 +40,10 @@ export default function WorkoutLogger() {
     window.addEventListener('storage', loadSettings);
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
+
+  const openConfirm = (title, message, onConfirm, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
+  };
 
   const handleAddSet = () => {
     setSets([...sets, { weight: '', reps: '' }]);
@@ -47,37 +56,79 @@ export default function WorkoutLogger() {
   };
 
   const handleRemoveSet = (index) => {
-    const newSets = sets.filter((_, i) => i !== index);
-    setSets(newSets);
+    const setToRemove = sets[index];
+    const hasData = setToRemove.weight || setToRemove.reps;
+
+    // Helper to actually remove it
+    const remove = () => {
+        const newSets = sets.filter((_, i) => i !== index);
+        setSets(newSets);
+    };
+
+    // If set has data, confirm first. If empty, just remove.
+    if (hasData) {
+        openConfirm(
+            "Remove Set?", 
+            "This set has data. Are you sure you want to remove it?", 
+            remove, 
+            true // Destructive
+        );
+    } else {
+        remove();
+    }
   };
 
   const saveLift = async () => {
     const validSets = sets.filter(s => s.weight && s.reps);
-    if (validSets.length === 0) return alert("Add at least one set");
+    if (validSets.length === 0) {
+        openConfirm("Missing Data", "Please enter weight and reps for at least one set.");
+        return;
+    }
 
     setIsSubmitting(true);
     try {
       await addLog(date, exerciseId, validSets);
-      alert("Workout Logged!");
-      setSets([{ weight: '', reps: '' }]); 
+      
+      // Use Custom Modal for Success
+      openConfirm(
+        "Workout Logged",
+        "Great work! Your session has been saved to history.",
+        () => {
+            setSets([{ weight: '', reps: '' }]); // Reset only after confirming/closing
+        },
+        false // Not destructive (Success style)
+      );
+
     } catch (err) {
-      alert("Error saving workout. Please try again.");
+      openConfirm("Error", "Could not save workout. Please try again.", null, true);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const saveCardio = async () => {
-    if (!cardioDuration) return alert("Duration is required");
+    if (!cardioDuration) {
+        openConfirm("Missing Data", "Duration is required to log cardio.");
+        return;
+    }
     
     setIsSubmitting(true);
     try {
       await addCardioLog(date, cardioType, cardioDuration, cardioDistance);
-      alert("Cardio Logged!");
-      setCardioDuration('');
-      setCardioDistance('');
+      
+      // Use Custom Modal for Success
+      openConfirm(
+        "Cardio Logged",
+        "Nice endurance! Your session has been saved.",
+        () => {
+            setCardioDuration('');
+            setCardioDistance('');
+        },
+        false
+      );
+
     } catch (err) {
-      alert("Error saving cardio. Please try again.");
+      openConfirm("Error", "Could not save cardio. Please try again.", null, true);
     } finally {
       setIsSubmitting(false);
     }
@@ -85,6 +136,17 @@ export default function WorkoutLogger() {
 
   return (
     <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
+      
+      {/* MOUNT MODAL */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        isDestructive={modalConfig.isDestructive}
+      />
+
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
 
       <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-6">
@@ -135,10 +197,9 @@ export default function WorkoutLogger() {
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
-                {/* UPDATED: Lowercase Placeholder */}
                 <input 
                   type="number" 
-                  placeholder={weightUnit.toLowerCase()} 
+                  placeholder={weightUnit} 
                   value={set.weight}
                   onChange={(e) => handleSetChange(index, 'weight', e.target.value)}
                   className="w-full bg-black border border-zinc-700 rounded p-2 text-white"

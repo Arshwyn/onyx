@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { getExercises, getRoutines, saveRoutine, deleteRoutine, addExercise, deleteCustomExercise } from '../dataManager';
+import ConfirmModal from './ConfirmModal'; // IMPORT
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 const CATEGORIES = ['Push', 'Pull', 'Legs', 'Core', 'Other'];
 
-export default function RoutineManager({ onBack }) { // Added prop
+export default function RoutineManager({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [routines, setRoutines] = useState([]);
   const [allExercises, setAllExercises] = useState([]);
   
+  // --- MODAL STATE ---
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
+  });
+
   const [selectedDay, setSelectedDay] = useState(DAYS[0]);
   const [routineName, setRoutineName] = useState('');
   const [selectedExercises, setSelectedExercises] = useState([]); 
@@ -26,6 +32,10 @@ export default function RoutineManager({ onBack }) { // Added prop
     loadData();
   }, []);
 
+  const openConfirm = (title, message, onConfirm, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
+  };
+
   const loadData = async () => {
     setLoading(true);
     const [loadedExercises, loadedRoutines] = await Promise.all([
@@ -38,7 +48,11 @@ export default function RoutineManager({ onBack }) { // Added prop
   };
 
   const handleCreateExercise = async () => {
-    if (!newExName) return alert("Name required");
+    if (!newExName) {
+        // ALERT
+        openConfirm("Missing Name", "Please enter a name for the custom exercise.");
+        return;
+    }
     await addExercise(newExName, newExCat);
     setShowNewExForm(false);
     setNewExName('');
@@ -46,13 +60,19 @@ export default function RoutineManager({ onBack }) { // Added prop
     setAllExercises(updated);
   };
 
-  const handleDeleteExercise = async (e, id) => {
+  const handleDeleteExercise = (e, id) => {
     e.stopPropagation(); 
-    if(confirm("Delete this custom exercise?")) {
-        await deleteCustomExercise(id);
-        const updated = await getExercises();
-        setAllExercises(updated);
-    }
+    // USE CUSTOM MODAL
+    openConfirm(
+        "Delete Exercise?",
+        "Are you sure you want to delete this custom exercise?",
+        async () => {
+            await deleteCustomExercise(id);
+            const updated = await getExercises();
+            setAllExercises(updated);
+        },
+        true
+    );
   }
 
   const toggleExercise = (ex) => {
@@ -95,7 +115,10 @@ export default function RoutineManager({ onBack }) { // Added prop
   };
 
   const addCardioToRoutine = () => {
-    if (!cardioInput.duration) return alert("Duration required");
+    if (!cardioInput.duration) {
+        openConfirm("Missing Duration", "Please set a duration for the cardio session.");
+        return;
+    }
     const newCardio = {
       id: Date.now(),
       type: cardioInput.type,
@@ -165,9 +188,13 @@ export default function RoutineManager({ onBack }) { // Added prop
   };
 
   const handleSave = async () => {
-    if (!routineName) return alert("Name required");
+    if (!routineName) {
+        openConfirm("Missing Name", "Please give your routine a name.");
+        return;
+    }
     if (!isRestDay && selectedExercises.length === 0 && routineCardio.length === 0) {
-      return alert("Select exercises, add cardio, or mark as Rest Day");
+      openConfirm("Empty Routine", "Please select exercises, add cardio, or mark this as a Rest Day.");
+      return;
     }
     
     const exercisesToSave = selectedExercises.map(ex => ({
@@ -186,15 +213,21 @@ export default function RoutineManager({ onBack }) { // Added prop
     
     handleCancelEdit();
     loadData();
-    alert(editingId ? "Routine Updated!" : `Saved routine for ${selectedDay}`);
+    openConfirm("Success", editingId ? "Routine Updated!" : `Saved routine for ${selectedDay}`, null, false);
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("Delete this routine?")) {
-      await deleteRoutine(id);
-      if (editingId === id) handleCancelEdit();
-      loadData();
-    }
+  const handleDelete = (id) => {
+    // USE CUSTOM MODAL
+    openConfirm(
+        "Delete Routine?",
+        "Are you sure you want to delete this routine?",
+        async () => {
+            await deleteRoutine(id);
+            if (editingId === id) handleCancelEdit();
+            loadData();
+        },
+        true
+    );
   };
 
   if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading...</div>;
@@ -202,7 +235,16 @@ export default function RoutineManager({ onBack }) { // Added prop
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
-      {/* Back Button */}
+      {/* MOUNT MODAL */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        isDestructive={modalConfig.isDestructive}
+      />
+
       <div className="mb-4">
         <button 
           onClick={onBack}
