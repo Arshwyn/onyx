@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getRoutines, getExercises, addLog, getLogs, // Exercise Data
-  getBodyWeights, addBodyWeight // Weight Data
+  getRoutines, getExercises, addLog, getLogs, 
+  getBodyWeights, addBodyWeight 
 } from '../dataManager';
 
 export default function DailyView() {
@@ -16,33 +16,44 @@ export default function DailyView() {
   const [lastPerformances, setLastPerformances] = useState({});
 
   // Body Weight State
-  const [todayWeight, setTodayWeight] = useState(null); // null or the logged value
+  const [todayWeight, setTodayWeight] = useState(null); 
   const [weightInput, setWeightInput] = useState('');
+
+  // --- NEW: Rest Day State ---
+  const [isAdHocRest, setIsAdHocRest] = useState(false);
+  const [todayDate, setTodayDate] = useState('');
 
   useEffect(() => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayDateObj = new Date();
-    const todayDayName = days[todayDateObj.getDay()];
-    const todayDateString = todayDateObj.toISOString().split('T')[0];
+    const dateObj = new Date();
+    const dayName = days[dateObj.getDay()];
+    const dateStr = dateObj.toISOString().split('T')[0];
     
-    setCurrentDay(todayDayName);
+    setCurrentDay(dayName);
+    setTodayDate(dateStr);
 
-    // --- 1. CHECK BODY WEIGHT STATUS ---
+    // 1. Check Ad-Hoc Rest Status
+    const restKey = `onyx_rest_${dateStr}`;
+    if (localStorage.getItem(restKey) === 'true') {
+      setIsAdHocRest(true);
+    }
+
+    // 2. Load Body Weight
     const weights = getBodyWeights();
-    const existingWeight = weights.find(w => w.date === todayDateString);
+    const existingWeight = weights.find(w => w.date === dateStr);
     if (existingWeight) {
       setTodayWeight(existingWeight.weight);
     }
 
-    // --- 2. LOAD WORKOUT LOGS ---
+    // 3. Load Logs
     const allLogs = getLogs();
-    const todaysLogs = allLogs.filter(log => log.date === todayDateString);
+    const todaysLogs = allLogs.filter(log => log.date === dateStr);
     const doneIds = todaysLogs.map(log => String(log.exerciseId));
     setCompletedIds(doneIds);
 
-    // --- 3. LOAD ROUTINE ---
+    // 4. Load Routine
     const routines = getRoutines();
-    const routine = routines.find(r => r.day === todayDayName);
+    const routine = routines.find(r => r.day === dayName);
     
     if (routine) {
       setTodayRoutine(routine);
@@ -59,7 +70,7 @@ export default function DailyView() {
 
       setTodayExercises(mergedData);
 
-      // Initialize Inputs
+      // Init Inputs
       const initialInputs = {};
       mergedData.forEach(ex => {
         initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
@@ -69,23 +80,20 @@ export default function DailyView() {
       });
       setSetInputs(initialInputs);
 
-      // Calculate "Last Time" Stats
+      // Calc History
       const historyStats = {};
       mergedData.forEach(ex => {
         const pastLogs = allLogs.filter(l => 
           String(l.exerciseId) === String(ex.id) && 
-          l.date !== todayDateString 
+          l.date !== dateStr 
         );
-        
         if (pastLogs.length > 0) {
           pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
           const lastLog = pastLogs[0]; 
-
           if (lastLog.sets && lastLog.sets.length > 0) {
             const bestSet = lastLog.sets.reduce((prev, current) => 
               (Number(current.weight) > Number(prev.weight) ? current : prev)
             , lastLog.sets[0]);
-            
             historyStats[ex.id] = `${bestSet.weight} lbs x ${bestSet.reps}`;
           }
         }
@@ -94,12 +102,21 @@ export default function DailyView() {
     }
   }, []);
 
-  // --- ACTIONS ---
+  // --- HANDLERS ---
+
+  const handleToggleAdHocRest = () => {
+    const newState = !isAdHocRest;
+    setIsAdHocRest(newState);
+    if (newState) {
+      localStorage.setItem(`onyx_rest_${todayDate}`, 'true');
+    } else {
+      localStorage.removeItem(`onyx_rest_${todayDate}`);
+    }
+  };
 
   const handleSaveWeight = () => {
     if (!weightInput) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    addBodyWeight(weightInput, todayStr);
+    addBodyWeight(weightInput, todayDate);
     setTodayWeight(weightInput);
   };
 
@@ -107,7 +124,6 @@ export default function DailyView() {
     setSetInputs(prev => {
       const currentSets = [...prev[exId]];
       currentSets[index] = { ...currentSets[index], [field]: value };
-
       if (index === 0) {
         for (let i = 1; i < currentSets.length; i++) {
           currentSets[i] = { ...currentSets[i], [field]: value };
@@ -120,15 +136,10 @@ export default function DailyView() {
   const handleLogExercise = (exId) => {
     const setsToLog = setInputs[exId];
     if (!setsToLog) return;
-
     const validSets = setsToLog.filter(s => s.weight !== '');
     if (validSets.length === 0) return alert("Please enter weight for at least one set.");
 
-    addLog(
-      new Date().toISOString().split('T')[0],
-      exId,
-      validSets 
-    );
+    addLog(todayDate, exId, validSets);
 
     const strId = String(exId);
     if (!completedIds.includes(strId)) {
@@ -146,31 +157,61 @@ export default function DailyView() {
     }
   };
 
+  // --- RENDER HELPERS ---
+
+  const renderRestView = (title, subtitle, showToggle) => (
+    <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
+      <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4">
+        <span className="text-3xl">☕</span>
+      </div>
+      <h2 className="text-2xl font-black italic uppercase text-white mb-2">{title}</h2>
+      <p className="text-zinc-500 text-sm mb-6">{subtitle}</p>
+      
+      {showToggle && (
+        <button 
+          onClick={handleToggleAdHocRest}
+          className="text-xs text-zinc-600 underline hover:text-white"
+        >
+          No, I actually want to workout
+        </button>
+      )}
+    </div>
+  );
+
   // --- RENDER ---
 
-  if (!todayRoutine) {
-    return (
-      <div className="text-center mt-20 text-gray-500">
-        <h2 className="text-2xl text-white font-bold mb-2">{currentDay}</h2>
-        <p>No routine scheduled for today.</p>
-        <p className="text-xs mt-4">Go to "Manage" to set up a routine.</p>
-      </div>
-    );
-  }
+  // 1. Is it a Scheduled Rest Day? (Routine exists but has 0 exercises)
+  const isScheduledRest = todayRoutine && todayRoutine.exercises.length === 0;
+
+  // 2. Is there NO routine at all?
+  const isNoRoutine = !todayRoutine;
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
       
-      {/* 1. Header */}
-      <div className="mb-6 border-b border-zinc-800 pb-4">
-        <h2 className="text-sm text-blue-400 font-bold uppercase tracking-wider">{currentDay}</h2>
-        <h1 className="text-3xl font-black italic uppercase">{todayRoutine.name}</h1>
+      {/* Header */}
+      <div className="mb-6 border-b border-zinc-800 pb-4 flex justify-between items-end">
+        <div>
+          <h2 className="text-sm text-blue-400 font-bold uppercase tracking-wider">{currentDay}</h2>
+          <h1 className="text-3xl font-black italic uppercase">
+            {isAdHocRest ? 'Rest Day' : (todayRoutine ? todayRoutine.name : 'No Plan')}
+          </h1>
+        </div>
+        
+        {/* Ad-Hoc Toggle Button (Only show if it's a workout day) */}
+        {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
+          <button 
+            onClick={handleToggleAdHocRest}
+            className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition"
+          >
+            Take Rest Day
+          </button>
+        )}
       </div>
 
-      {/* 2. Morning Check-In (Body Weight) */}
+      {/* Weight Tracker (Always Visible) */}
       <div className="mb-8">
         {todayWeight ? (
-          // STATE: LOGGED
           <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
@@ -183,7 +224,6 @@ export default function DailyView() {
             </div>
           </div>
         ) : (
-          // STATE: NOT LOGGED
           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
             <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Morning Body Weight</label>
             <div className="flex gap-2">
@@ -205,122 +245,130 @@ export default function DailyView() {
         )}
       </div>
 
-      {/* 3. Routine List */}
-      <div className="space-y-4">
-        {todayExercises.map(ex => {
-          const strId = String(ex.id);
-          const isComplete = completedIds.includes(strId);
-          const isExpanded = expandedIds.includes(strId);
-          const showBody = !isComplete || isExpanded;
-          const lastStats = lastPerformances[ex.id];
+      {/* Main Content Logic */}
+      {isAdHocRest ? (
+        renderRestView("Taking it Easy", "Recovery is when the growth happens.", true)
+      ) : isScheduledRest ? (
+        renderRestView("Scheduled Rest", "Enjoy your day off.", false)
+      ) : isNoRoutine ? (
+        <div className="text-center mt-10 text-gray-500">
+          <p>No routine scheduled for today.</p>
+          <p className="text-xs mt-4">Go to "Manage" to set up a routine.</p>
+        </div>
+      ) : (
+        /* WORKOUT LIST */
+        <div className="space-y-4">
+          {todayExercises.map(ex => {
+            const strId = String(ex.id);
+            const isComplete = completedIds.includes(strId);
+            const isExpanded = expandedIds.includes(strId);
+            const showBody = !isComplete || isExpanded;
+            const lastStats = lastPerformances[ex.id];
 
-          return (
-            <div 
-              key={ex.id} 
-              className={`rounded-lg overflow-hidden transition-all duration-300 border ${
-                isComplete 
-                  ? 'bg-zinc-900 border-green-900/50' 
-                  : 'bg-zinc-900 border-zinc-800'
-              }`}
-            >
-              
-              {/* Header */}
+            return (
               <div 
-                onClick={() => isComplete && toggleExpand(ex.id)}
-                className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}
+                key={ex.id} 
+                className={`rounded-lg overflow-hidden transition-all duration-300 border ${
+                  isComplete 
+                    ? 'bg-zinc-900 border-green-900/50' 
+                    : 'bg-zinc-900 border-zinc-800'
+                }`}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className={`font-bold text-lg ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>
-                      {ex.name}
-                    </h3>
-                    {isComplete && (
-                      <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        Done
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
-                </div>
-                
-                <div className="text-right flex flex-col items-end">
-                  {isComplete ? (
-                    <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-                      {isExpanded ? 'Hide' : 'Show'} 
-                      <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-1">
-                        <span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span>
-                        <span className="text-sm font-mono text-blue-400 font-bold">
-                          {ex.targetSets} x {ex.targetReps}
+                <div 
+                  onClick={() => isComplete && toggleExpand(ex.id)}
+                  className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-bold text-lg ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>
+                        {ex.name}
+                      </h3>
+                      {isComplete && (
+                        <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Done
                         </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
+                  </div>
+                  
+                  <div className="text-right flex flex-col items-end">
+                    {isComplete ? (
+                      <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                        {isExpanded ? 'Hide' : 'Show'} 
+                        <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span>
                       </div>
-                      {lastStats && (
-                        <div>
-                          <span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span>
-                          <span className="text-sm font-mono text-gray-300">
-                            {lastStats}
+                    ) : (
+                      <>
+                        <div className="mb-1">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span>
+                          <span className="text-sm font-mono text-blue-400 font-bold">
+                            {ex.targetSets} x {ex.targetReps}
                           </span>
                         </div>
-                      )}
-                    </>
-                  )}
+                        {lastStats && (
+                          <div>
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span>
+                            <span className="text-sm font-mono text-gray-300">
+                              {lastStats}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Body */}
-              {showBody && (
-                <div className={isComplete ? "opacity-50" : ""}>
-                  <div className="px-4 pb-4 space-y-3">
-                    <div className="flex text-[10px] text-gray-500 uppercase font-bold px-1">
-                      <div className="w-8 text-center">Set</div>
-                      <div className="flex-1 text-center">Lbs</div>
-                      <div className="flex-1 text-center">Reps</div>
-                    </div>
-
-                    {setInputs[ex.id]?.map((set, idx) => (
-                      <div key={idx} className="flex gap-3 items-center">
-                        <div className="w-8 text-center text-zinc-600 font-bold text-sm">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <input 
-                            type="number" 
-                            placeholder="-"
-                            value={set.weight}
-                            onChange={(e) => handleSetChange(ex.id, idx, 'weight', e.target.value)}
-                            className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <input 
-                            type="number" 
-                            placeholder="-"
-                            value={set.reps}
-                            onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)}
-                            className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono"
-                          />
-                        </div>
+                {showBody && (
+                  <div className={isComplete ? "opacity-50" : ""}>
+                    <div className="px-4 pb-4 space-y-3">
+                      <div className="flex text-[10px] text-gray-500 uppercase font-bold px-1">
+                        <div className="w-8 text-center">Set</div>
+                        <div className="flex-1 text-center">Lbs</div>
+                        <div className="flex-1 text-center">Reps</div>
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="p-3 bg-zinc-800/20 border-t border-zinc-800">
-                    <button 
-                      onClick={() => handleLogExercise(ex.id)}
-                      className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition tracking-widest text-xs uppercase"
-                    >
-                      {isComplete ? 'Update Log' : 'Complete Exercise'}
-                    </button>
+                      {setInputs[ex.id]?.map((set, idx) => (
+                        <div key={idx} className="flex gap-3 items-center">
+                          <div className="w-8 text-center text-zinc-600 font-bold text-sm">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1">
+                            <input 
+                              type="number" 
+                              placeholder="-"
+                              value={set.weight}
+                              onChange={(e) => handleSetChange(ex.id, idx, 'weight', e.target.value)}
+                              className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input 
+                              type="number" 
+                              placeholder="-"
+                              value={set.reps}
+                              onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)}
+                              className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-3 bg-zinc-800/20 border-t border-zinc-800">
+                      <button 
+                        onClick={() => handleLogExercise(ex.id)}
+                        className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition tracking-widest text-xs uppercase"
+                      >
+                        {isComplete ? 'Update Log' : 'Complete Exercise'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
