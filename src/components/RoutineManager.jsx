@@ -65,6 +65,7 @@ export default function RoutineManager() {
     if (isSelected) {
       setSelectedExercises(selectedExercises.filter(item => String(item.id) !== String(ex.id)));
     } else {
+      // Add to end of list
       setSelectedExercises([
         ...selectedExercises, 
         { id: ex.id, name: ex.name, targetSets: 3, targetReps: 10 }
@@ -79,6 +80,24 @@ export default function RoutineManager() {
       }
       return item;
     }));
+  };
+
+  const moveExercise = (index, direction) => {
+    if (direction === -1 && index === 0) return;
+    if (direction === 1 && index === selectedExercises.length - 1) return;
+
+    const newOrder = [...selectedExercises];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index + direction];
+    newOrder[index + direction] = temp;
+    
+    setSelectedExercises(newOrder);
+  };
+
+  const removeSelectedExercise = (index) => {
+    const newList = [...selectedExercises];
+    newList.splice(index, 1);
+    setSelectedExercises(newList);
   };
 
   // --- CARDIO LOGIC ---
@@ -196,19 +215,11 @@ export default function RoutineManager() {
 
       <div className={`p-4 rounded-lg border mb-8 transition-colors ${editingId ? 'bg-zinc-800 border-blue-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
         
-        {/* NEW: Grid Layout for Days */}
+        {/* Day Selector */}
         <label className="block text-xs text-zinc-500 uppercase font-bold mb-2">Day of Week</label>
         <div className="grid grid-cols-4 gap-2 mb-6">
           {DAYS.map(day => (
-            <button
-              key={day}
-              onClick={() => setSelectedDay(day)}
-              className={`py-2 rounded text-xs font-bold uppercase transition-all border ${
-                selectedDay === day 
-                  ? 'bg-white text-black border-white' 
-                  : 'bg-black text-zinc-500 border-zinc-800 hover:border-zinc-600'
-              }`}
-            >
+            <button key={day} onClick={() => setSelectedDay(day)} className={`py-2 rounded text-xs font-bold uppercase transition-all border ${selectedDay === day ? 'bg-white text-black border-white' : 'bg-black text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>
               {day.slice(0, 3)}
             </button>
           ))}
@@ -248,15 +259,65 @@ export default function RoutineManager() {
             </div>
           </div>
 
-          {/* Exercise List */}
-          <div className="flex justify-between items-end mb-2">
-            <label className="text-xs text-gray-500 uppercase font-bold">Select Exercises</label>
+          {/* --- SECTION 1: SELECTED EXERCISES (REORDERABLE) --- */}
+          {selectedExercises.length > 0 && (
+            <div className="mb-6">
+                <label className="text-xs text-blue-400 uppercase font-bold mb-2 block">Routine Order</label>
+                <div className="space-y-2">
+                    {selectedExercises.map((ex, idx) => (
+                        <div key={`${ex.id}-${idx}`} className="bg-zinc-800 p-3 rounded border border-zinc-700 flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs font-bold text-zinc-500 w-4">{idx + 1}.</span>
+                                    <span className="font-bold text-white text-sm">{ex.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {/* Reorder Buttons */}
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => moveExercise(idx, -1)}
+                                            className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-30 pointer-events-none' : ''}`}
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
+                                        </button>
+                                        <button 
+                                            onClick={() => moveExercise(idx, 1)}
+                                            className={`w-6 h-6 rounded bg-black flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === selectedExercises.length - 1 ? 'opacity-30 pointer-events-none' : ''}`}
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div className="w-px h-4 bg-zinc-600 mx-1"></div>
+                                    <button onClick={() => removeSelectedExercise(idx)} className="text-red-500 hover:text-red-400">✕</button>
+                                </div>
+                            </div>
+                            
+                            {/* Targets Row */}
+                            <div className="flex gap-4 pl-7">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Sets</span>
+                                    <input type="number" value={ex.targetSets} onChange={(e) => updateTarget(ex.id, 'targetSets', e.target.value)} className="w-12 bg-black border border-zinc-600 rounded p-1 text-xs text-center text-white outline-none focus:border-blue-500" />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Reps</span>
+                                    <input type="number" value={ex.targetReps} onChange={(e) => updateTarget(ex.id, 'targetReps', e.target.value)} className="w-12 bg-black border border-zinc-600 rounded p-1 text-xs text-center text-white outline-none focus:border-blue-500" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
+
+          {/* --- SECTION 2: EXERCISE LIBRARY (ADDER) --- */}
+          <div className="flex justify-between items-end mb-2 pt-4 border-t border-zinc-800">
+            <label className="text-xs text-gray-500 uppercase font-bold">Exercise Library</label>
             <button onClick={() => setShowNewExForm(!showNewExForm)} className="text-[10px] bg-zinc-800 text-blue-400 border border-blue-900/30 px-2 py-1 rounded hover:bg-zinc-700">
-                {showNewExForm ? 'Cancel' : '+ New Exercise'}
+                {showNewExForm ? 'Cancel' : '+ Create Custom'}
             </button>
           </div>
 
-          {/* NEW EXERCISE FORM */}
+          {/* New Custom Exercise Form */}
           {showNewExForm && (
             <div className="bg-black border border-blue-500/50 p-3 rounded mb-4 animate-fade-in">
                 <label className="text-[10px] text-blue-400 font-bold block mb-1">Name</label>
@@ -269,28 +330,23 @@ export default function RoutineManager() {
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto space-y-2 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
+          {/* The Library List */}
+          <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
             {allExercises.map(ex => {
-              const isSelected = selectedExercises.find(item => String(item.id) === String(ex.id));
+              const isSelected = selectedExercises.some(item => String(item.id) === String(ex.id));
               const isCustom = !String(ex.id).startsWith('ex_');
 
               return (
-                <div key={ex.id} className={`p-2 rounded transition border ${isSelected ? 'bg-zinc-800 border-zinc-600' : 'hover:bg-zinc-900 border-transparent'}`}>
-                  <div onClick={() => toggleExercise(ex)} className="flex items-center justify-between cursor-pointer">
+                <div key={ex.id} className={`p-2 rounded transition flex justify-between items-center group ${isSelected ? 'opacity-50' : 'hover:bg-zinc-900 cursor-pointer'}`} onClick={() => !isSelected && toggleExercise(ex)}>
                     <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded border ${isSelected ? 'bg-white border-white' : 'border-gray-500'}`}></div>
-                        <span className={isSelected ? 'text-white font-bold' : 'text-gray-400'}>{ex.name}</span>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-zinc-600 border-zinc-600' : 'border-zinc-500'}`}>
+                            {isSelected && <span className="text-black text-[9px]">✓</span>}
+                        </div>
+                        <span className={isSelected ? 'text-zinc-500' : 'text-gray-300 font-bold'}>{ex.name}</span>
                     </div>
-                    {isCustom && (
+                    {isCustom && !isSelected && (
                         <button onClick={(e) => handleDeleteExercise(e, ex.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
                     )}
-                  </div>
-                  {isSelected && (
-                    <div className="flex gap-2 mt-2 ml-7">
-                      <div className="flex flex-col"><span className="text-[10px] text-gray-500 uppercase">Sets</span><input type="number" value={isSelected.targetSets} onChange={(e) => updateTarget(ex.id, 'targetSets', e.target.value)} className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center outline-none focus:border-blue-400" /></div>
-                      <div className="flex flex-col"><span className="text-[10px] text-gray-500 uppercase">Reps</span><input type="number" value={isSelected.targetReps} onChange={(e) => updateTarget(ex.id, 'targetReps', e.target.value)} className="w-16 bg-black border border-zinc-600 rounded p-1 text-sm text-center outline-none focus:border-blue-400" /></div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -303,7 +359,7 @@ export default function RoutineManager() {
         </div>
       </div>
       
-      {/* List of Routines (Read only view) */}
+      {/* Read-Only Schedule List */}
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Your Schedule</h3>
       <div className="space-y-3">
         {routines.sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).map(routine => {

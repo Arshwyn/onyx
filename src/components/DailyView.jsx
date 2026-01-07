@@ -5,18 +5,14 @@ import {
   getCardioLogs, addCardioLog, deleteCardioLog, 
   getCircumferences, addCircumference, deleteCircumference 
 } from '../dataManager';
-import ConfirmModal from './ConfirmModal'; // Import the new component
+import ConfirmModal from './ConfirmModal'; 
 
 export default function DailyView() {
   const [loading, setLoading] = useState(true);
   
   // --- MODAL STATE ---
   const [modalConfig, setModalConfig] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-    isDestructive: false
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
   });
 
   // --- DATES & NAVIGATION ---
@@ -67,7 +63,6 @@ export default function DailyView() {
 
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
 
-  // --- HELPER: Open Confirm Modal ---
   const openConfirm = (title, message, onConfirm, isDestructive = false) => {
     setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
   };
@@ -96,7 +91,6 @@ export default function DailyView() {
     // 3. Process Body Stats
     const existingWeight = weights.find(w => w.date === dateStr);
     setViewWeight(existingWeight ? existingWeight.weight : null);
-
     const daysMeasurements = mData.filter(m => m.date === dateStr);
     setViewMeasurements(daysMeasurements);
 
@@ -175,6 +169,20 @@ export default function DailyView() {
     setLoading(false);
   };
 
+  // --- REORDER LOGIC ---
+  const moveExercise = (index, direction, e) => {
+    e.stopPropagation(); 
+    if (direction === -1 && index === 0) return;
+    if (direction === 1 && index === exercises.length - 1) return;
+
+    const newOrder = [...exercises];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index + direction];
+    newOrder[index + direction] = temp;
+    
+    setExercises(newOrder);
+  };
+
   // --- NAVIGATION HANDLERS ---
   const changeDay = (offset) => {
     const newDate = new Date(viewDate);
@@ -191,7 +199,6 @@ export default function DailyView() {
 
   const handleSwapToToday = () => {
     if (!currentRoutine) return;
-    // USE CUSTOM MODAL
     openConfirm(
         'Swap Routine?',
         `Do you want to replace today's workout with ${currentRoutine.name}?`,
@@ -206,7 +213,6 @@ export default function DailyView() {
   };
 
   const handleRevertSchedule = () => {
-    // USE CUSTOM MODAL
     openConfirm(
         'Revert Schedule?',
         'This will go back to the original scheduled routine for today.',
@@ -215,7 +221,7 @@ export default function DailyView() {
             localStorage.removeItem(`onyx_swap_${dateStr}`);
             loadView(viewDate);
         },
-        true // Destructive visual style
+        true 
     );
   };
 
@@ -243,15 +249,12 @@ export default function DailyView() {
     const dateStr = getDateStr(viewDate);
     await addCircumference(dateStr, measurePart, measureValue);
     setMeasureValue('');
-    
-    // Refresh measurements
     const mData = await getCircumferences();
     const daysMeasurements = mData.filter(m => m.date === dateStr);
     setViewMeasurements(daysMeasurements);
   };
 
   const handleDeleteMeasurement = (id) => {
-    // USE CUSTOM MODAL
     openConfirm(
         'Delete Measurement?',
         'Are you sure you want to remove this entry?',
@@ -286,7 +289,6 @@ export default function DailyView() {
   };
 
   const handleDeleteCardio = (id) => {
-    // USE CUSTOM MODAL
     openConfirm(
         'Delete Session?',
         'Remove this cardio log from your history?',
@@ -403,9 +405,9 @@ export default function DailyView() {
         </div>
       </div>
 
-      {/* 2. BODY STATS (Weight & Measure) */}
+      {/* 2. BODY STATS */}
       <div className="mb-4 space-y-2">
-        {/* A. WEIGHT */}
+        {/* WEIGHT */}
         {viewWeight ? (
           <div className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -423,9 +425,8 @@ export default function DailyView() {
           </div>
         )}
 
-        {/* B. MEASUREMENTS (Always Visible) */}
+        {/* MEASUREMENTS */}
         <div className="space-y-2">
-            {/* List of Logged Measurements */}
             {viewMeasurements.map(m => (
                 <div key={m.id} className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -441,7 +442,6 @@ export default function DailyView() {
                 </div>
             ))}
 
-            {/* Input Form */}
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
                 <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
                 <div className="flex gap-2">
@@ -527,7 +527,7 @@ export default function DailyView() {
         </div>
       ) : (
         <div className="space-y-4">
-          {exercises.map(ex => {
+          {exercises.map((ex, idx) => { // Added index for reordering
             const strId = String(ex.id);
             const isComplete = completedIds.includes(strId);
             const isExpanded = expandedIds.includes(strId);
@@ -544,7 +544,27 @@ export default function DailyView() {
                     </div>
                     <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
                   </div>
-                  <div className="text-right flex flex-col items-end">
+                  
+                  {/* RIGHT SIDE CONTAINER */}
+                  <div className="text-right flex flex-col items-end gap-2">
+                    {/* REORDER BUTTONS (SIDE-BY-SIDE) */}
+                    {!isComplete && (
+                        <div className="flex gap-1 mb-1">
+                           <button 
+                             onClick={(e) => moveExercise(idx, -1, e)}
+                             className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}
+                           >
+                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
+                           </button>
+                           <button 
+                             onClick={(e) => moveExercise(idx, 1, e)}
+                             className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}
+                           >
+                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                           </button>
+                        </div>
+                    )}
+
                     {isComplete ? (
                       <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">{isExpanded ? 'Hide' : 'Show'} <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span></div>
                     ) : (
