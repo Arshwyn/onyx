@@ -11,7 +11,16 @@ import WorkoutLogger from './components/WorkoutLogger';
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [view, setView] = useState('daily'); // daily, history, manage, trends, log
+  
+  // CHANGED: Initialize from localStorage (default to 'daily' if nothing saved)
+  const [view, setView] = useState(() => {
+    return localStorage.getItem('onyx_view') || 'daily';
+  });
+
+  // CHANGED: Save to localStorage whenever view changes
+  useEffect(() => {
+    localStorage.setItem('onyx_view', view);
+  }, [view]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
