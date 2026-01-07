@@ -260,7 +260,6 @@ export default function DailyView() {
 
   const handleSaveMeasurement = async () => {
     if (!measureValue) {
-        // ALERT (No confirm action)
         openConfirm("Missing Value", "Please enter a measurement value before saving.");
         return;
     }
@@ -290,12 +289,13 @@ export default function DailyView() {
   // --- CARDIO ACTIONS ---
   const handleSaveCardio = async () => {
     if (!cardioDuration) {
-        // ALERT
         openConfirm("Missing Duration", "Please enter a duration in minutes.");
         return;
     }
     const dateStr = getDateStr(viewDate);
-    const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, cardioDistance);
+    const dist = cardioDistance === '' ? null : cardioDistance;
+    
+    const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, dist);
     const todaysCardio = newLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(todaysCardio);
     setCardioDuration('');
@@ -305,7 +305,9 @@ export default function DailyView() {
 
   const handleCompletePlannedCardio = async (plannedItem) => {
     const dateStr = getDateStr(viewDate);
-    const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, plannedItem.distance);
+    const dist = (plannedItem.distance === '' || plannedItem.distance === undefined) ? null : plannedItem.distance;
+
+    const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, dist);
     const todaysCardio = newLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(todaysCardio);
   };
@@ -344,7 +346,6 @@ export default function DailyView() {
     const validSets = setsToLog.filter(s => s.weight !== '');
     
     if (validSets.length === 0) {
-        // ALERT (Using destructive style for error emphasis)
         openConfirm("Empty Log", "Please enter weight for at least one set.", null, true);
         return;
     }
@@ -373,6 +374,9 @@ export default function DailyView() {
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
+
+  // Filter out planned logs from the "Completed Logs" list to avoid duplication
+  const unplannedCardio = viewCardioLogs.filter(log => !routineCardio.some(plan => plan.type === log.type));
 
   if (loading) {
     return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Onyx...</div>;
@@ -488,25 +492,46 @@ export default function DailyView() {
                 <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
                 <div className="space-y-2">
                     {routineCardio.map((planned) => {
-                        const isDone = viewCardioLogs.some(l => l.type === planned.type);
+                        // Find matching log if it exists
+                        const matchedLog = viewCardioLogs.find(l => l.type === planned.type);
+                        const isDone = !!matchedLog;
+
                         return (
                             <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}><span className="text-xs font-bold">C</span></div>
+                                    <div className={`p-2 rounded-full flex items-center justify-center w-8 h-8 ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}>
+                                        {/* CHANGED: If done, show Checkmark. If not, show C */}
+                                        {isDone ? (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                        ) : (
+                                            <span className="text-xs font-bold">C</span>
+                                        )}
+                                    </div>
                                     <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
                                 </div>
-                                {!isDone && <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>}
-                                {isDone && <span className="text-green-500 text-xs font-bold uppercase">Done</span>}
+                                {isDone ? (
+                                    // CHANGED: Added delete/undo button here so users can still remove it
+                                    <button 
+                                        onClick={() => handleDeleteCardio(matchedLog.id)} 
+                                        className="text-[10px] text-green-600 hover:text-red-500 font-bold uppercase tracking-wider flex items-center gap-1"
+                                    >
+                                        Done <span className="text-zinc-600 hover:text-red-500">✕</span>
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>
+                                )}
                             </div>
                         );
                     })}
                 </div>
             </div>
         )}
-        {viewCardioLogs.length > 0 && (
+        
+        {/* CHANGED: Only show unplanned logs to avoid duplicates */}
+        {unplannedCardio.length > 0 && (
           <div className="space-y-2 mb-2">
-            <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Completed Log</h3>
-            {viewCardioLogs.map(cardio => (
+            <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Additional Cardio</h3>
+            {unplannedCardio.map(cardio => (
               <div key={cardio.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="bg-zinc-800 text-zinc-400 p-2 rounded-full"><span className="text-xs font-bold">✓</span></div>
@@ -517,6 +542,7 @@ export default function DailyView() {
             ))}
           </div>
         )}
+
         {!isAdHocRest && !showCardioForm && (
             <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
         )}
