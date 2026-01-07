@@ -100,21 +100,60 @@ export const deleteRoutine = (id) => {
 const WEIGHT_KEY = 'onyx_bodyweight';
 
 export const getBodyWeights = () => {
-  const stored = localStorage.getItem(WEIGHT_KEY);
-  return stored ? JSON.parse(stored) : [];
+    const stored = localStorage.getItem(WEIGHT_KEY);
+    return stored ? JSON.parse(stored) : [];
 };
 
 export const addBodyWeight = (weight, date) => {
-  const weights = getBodyWeights();
-  const newEntry = { id: Date.now(), weight: parseFloat(weight), date };
-  const updated = [...weights, newEntry];
-  localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
-  return updated;
+    const weights = getBodyWeights();
+    const newEntry = { id: Date.now(), weight: parseFloat(weight), date };
+    const updated = [...weights, newEntry];
+    localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
+    return updated;
 };
 
 export const deleteBodyWeight = (id) => {
-  const weights = getBodyWeights();
-  const updated = weights.filter(w => w.id !== id);
-  localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
-  return updated;
+    const weights = getBodyWeights();
+    const updated = weights.filter(w => w.id !== id);
+    localStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
+    return updated;
+};
+
+const CARDIO_KEY = 'onyx_cardio';
+
+export const getCardioLogs = () => {
+    const stored = localStorage.getItem(CARDIO_KEY);
+    return stored ? JSON.parse(stored) : [];
+};
+
+export const addCardioLog = (date, type, duration, distance) => {
+    const logs = getCardioLogs();
+    const newLog = {
+        id: Date.now(),
+        date,
+        type,
+        duration: parseFloat(duration),
+        distance: distance ? parseFloat(distance) : null
+    };
+    const updated = [...logs, newLog];
+    localStorage.setItem(CARDIO_KEY, JSON.stringify(updated));
+    return updated;
+};
+
+export const deleteCardioLog = (id) => {
+    const logs = getCardioLogs();
+    const updated = logs.filter(l => l.id !== id);
+    localStorage.setItem(CARDIO_KEY, JSON.stringify(updated));
+    return updated;
+};
+
+export const updateCardioLog = (updatedLog) => {
+    const logs = getCardioLogs();
+    const index = logs.findIndex(log => log.id === updatedLog.id);
+
+    if (index !== -1) {
+        logs[index] = updatedLog;
+        localStorage.setItem(CARDIO_KEY, JSON.stringify(logs));
+    }
+    return logs;
 };

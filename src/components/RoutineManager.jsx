@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getExercises, getRoutines, saveRoutine, deleteRoutine } from '../dataManager';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
 export default function RoutineManager() {
   const [routines, setRoutines] = useState([]);
@@ -11,9 +12,12 @@ export default function RoutineManager() {
   const [selectedDay, setSelectedDay] = useState(DAYS[0]);
   const [routineName, setRoutineName] = useState('');
   const [selectedExercises, setSelectedExercises] = useState([]); 
-  const [isRestDay, setIsRestDay] = useState(false); // <--- NEW STATE
+  const [isRestDay, setIsRestDay] = useState(false);
+  
+  // New: Cardio State for Routine
+  const [routineCardio, setRoutineCardio] = useState([]); // [{ id, type, duration, distance }]
+  const [cardioInput, setCardioInput] = useState({ type: 'Run', duration: '', distance: '' });
 
-  // Edit Mode State
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
@@ -25,9 +29,9 @@ export default function RoutineManager() {
     setRoutines(getRoutines());
   };
 
+  // --- EXERCISE HANDLERS ---
   const toggleExercise = (ex) => {
-    if (isRestDay) return; // Prevent selection on rest days
-
+    if (isRestDay) return;
     const isSelected = selectedExercises.find(item => item.id === ex.id);
     if (isSelected) {
       setSelectedExercises(selectedExercises.filter(item => item.id !== ex.id));
@@ -48,13 +52,31 @@ export default function RoutineManager() {
     }));
   };
 
-  // Toggle the Rest Day mode
+  // --- CARDIO HANDLERS ---
+  const addCardioToRoutine = () => {
+    if (!cardioInput.duration) return alert("Duration required");
+    const newCardio = {
+      id: Date.now(),
+      type: cardioInput.type,
+      duration: cardioInput.duration,
+      distance: cardioInput.distance
+    };
+    setRoutineCardio([...routineCardio, newCardio]);
+    setCardioInput({ type: 'Run', duration: '', distance: '' }); // Reset input
+  };
+
+  const removeCardioFromRoutine = (id) => {
+    setRoutineCardio(routineCardio.filter(c => c.id !== id));
+  };
+
+  // --- MAIN FORM HANDLERS ---
   const handleRestToggle = () => {
     const newState = !isRestDay;
     setIsRestDay(newState);
     if (newState) {
       setRoutineName('Rest Day');
       setSelectedExercises([]);
+      setRoutineCardio([]);
     } else {
       setRoutineName('');
     }
@@ -64,8 +86,10 @@ export default function RoutineManager() {
     setEditingId(routine.id);
     setSelectedDay(routine.day);
     
-    // Check if it's a rest day (empty exercises)
-    if (routine.exercises.length === 0) {
+    // Load Cardio (if exists)
+    setRoutineCardio(routine.cardio || []);
+
+    if (routine.exercises.length === 0 && (!routine.cardio || routine.cardio.length === 0)) {
       setIsRestDay(true);
       setRoutineName('Rest Day');
       setSelectedExercises([]);
@@ -97,14 +121,16 @@ export default function RoutineManager() {
     setEditingId(null);
     setRoutineName('');
     setSelectedExercises([]);
+    setRoutineCardio([]);
     setSelectedDay(DAYS[0]);
     setIsRestDay(false);
   };
 
   const handleSave = () => {
-    // Validation: Need name AND exercises, UNLESS it is a rest day
     if (!routineName) return alert("Name required");
-    if (!isRestDay && selectedExercises.length === 0) return alert("Select exercises or mark as Rest Day");
+    if (!isRestDay && selectedExercises.length === 0 && routineCardio.length === 0) {
+      return alert("Select exercises, add cardio, or mark as Rest Day");
+    }
     
     const exercisesToSave = selectedExercises.map(ex => ({
       id: ex.id,
@@ -116,7 +142,8 @@ export default function RoutineManager() {
       id: editingId, 
       day: selectedDay,
       name: routineName,
-      exercises: exercisesToSave // Will be empty [] if rest day
+      exercises: exercisesToSave,
+      cardio: routineCardio // Save the cardio list
     });
     
     handleCancelEdit();
@@ -169,8 +196,9 @@ export default function RoutineManager() {
           <span className={isRestDay ? 'text-green-400 font-bold' : 'text-gray-400'}>Set as Rest Day</span>
         </div>
 
-        {/* Inputs (Disabled if Rest Day) */}
         <div className={isRestDay ? 'opacity-30 pointer-events-none grayscale' : ''}>
+          
+          {/* Routine Name */}
           <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Routine Name</label>
           <input 
             type="text" 
@@ -180,6 +208,54 @@ export default function RoutineManager() {
             className="w-full p-2 mb-4 rounded bg-black border border-zinc-700 text-white outline-none focus:border-white transition"
           />
 
+          {/* --- CARDIO BUILDER --- */}
+          <div className="mb-6 p-3 bg-blue-900/10 border border-blue-900/30 rounded-lg">
+            <label className="block text-xs text-blue-400 uppercase font-bold mb-2">Planned Cardio</label>
+            
+            {/* Added Cardio List */}
+            {routineCardio.length > 0 && (
+                <div className="space-y-2 mb-3">
+                    {routineCardio.map(c => (
+                        <div key={c.id} className="flex justify-between items-center bg-black/50 p-2 rounded border border-blue-900/30">
+                            <span className="text-sm font-bold text-gray-300">
+                                {c.type} <span className="text-zinc-500 font-normal">({c.duration}m {c.distance ? `/ ${c.distance}` : ''})</span>
+                            </span>
+                            <button onClick={() => removeCardioFromRoutine(c.id)} className="text-red-500 text-xs">✕</button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Cardio Inputs */}
+            <div className="flex gap-2">
+                <select 
+                    value={cardioInput.type}
+                    onChange={(e) => setCardioInput({...cardioInput, type: e.target.value})}
+                    className="bg-black border border-zinc-700 rounded p-2 text-white text-xs w-24"
+                >
+                    {CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <input 
+                    type="number" 
+                    placeholder="Min"
+                    value={cardioInput.duration}
+                    onChange={(e) => setCardioInput({...cardioInput, duration: e.target.value})}
+                    className="bg-black border border-zinc-700 rounded p-2 text-white text-xs w-16"
+                />
+                <input 
+                    type="number" 
+                    placeholder="Dist"
+                    value={cardioInput.distance}
+                    onChange={(e) => setCardioInput({...cardioInput, distance: e.target.value})}
+                    className="bg-black border border-zinc-700 rounded p-2 text-white text-xs w-16"
+                />
+                <button onClick={addCardioToRoutine} className="bg-blue-600 text-white font-bold px-3 rounded text-xs hover:bg-blue-500">
+                    +
+                </button>
+            </div>
+          </div>
+
+          {/* --- EXERCISE BUILDER --- */}
           <label className="block text-xs text-gray-500 uppercase font-bold mb-2">Select Exercises</label>
           <div className="max-h-64 overflow-y-auto space-y-2 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
             {allExercises.map(ex => {
@@ -230,20 +306,12 @@ export default function RoutineManager() {
         {/* Buttons */}
         <div className="flex gap-3">
             {editingId && (
-                <button 
-                    onClick={handleCancelEdit}
-                    className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600 transition uppercase tracking-widest text-xs"
-                >
+                <button onClick={handleCancelEdit} className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600 transition uppercase tracking-widest text-xs">
                     Cancel
                 </button>
             )}
-            <button 
-            onClick={handleSave}
-            className={`flex-[2] text-black font-bold py-3 rounded transition uppercase tracking-widest text-xs ${
-                editingId ? 'bg-blue-400 hover:bg-blue-300' : 'bg-white hover:bg-gray-200'
-            }`}
-            >
-            {editingId ? 'Update Routine' : 'Save Routine'}
+            <button onClick={handleSave} className={`flex-[2] text-black font-bold py-3 rounded transition uppercase tracking-widest text-xs ${editingId ? 'bg-blue-400 hover:bg-blue-300' : 'bg-white hover:bg-gray-200'}`}>
+                {editingId ? 'Update Routine' : 'Save Routine'}
             </button>
         </div>
       </div>
@@ -251,30 +319,23 @@ export default function RoutineManager() {
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Your Schedule</h3>
       <div className="space-y-3">
         {routines.sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).map(routine => {
-            const isRest = routine.exercises.length === 0;
+            const hasCardio = routine.cardio && routine.cardio.length > 0;
+            const isRest = routine.exercises.length === 0 && !hasCardio;
+            
             return (
               <div key={routine.id} className={`bg-zinc-900/50 border p-3 rounded flex justify-between items-center ${editingId === routine.id ? 'border-blue-500 bg-blue-900/10' : 'border-zinc-800'}`}>
                 <div>
                   <span className="text-xs text-blue-400 font-bold uppercase block">{routine.day}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-white font-bold text-lg">{routine.name}</span>
+                    {hasCardio && <span className="bg-blue-900/40 text-blue-300 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Cardio</span>}
                     {isRest && <span className="bg-zinc-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Rest</span>}
                   </div>
                 </div>
                 
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => handleEdit(routine)}
-                        className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded transition"
-                    >
-                        Edit
-                    </button>
-                    <button 
-                        onClick={() => handleDelete(routine.id)} 
-                        className="text-xs bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-3 py-2 rounded transition"
-                    >
-                        ✕
-                    </button>
+                    <button onClick={() => handleEdit(routine)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded transition">Edit</button>
+                    <button onClick={() => handleDelete(routine.id)} className="text-xs bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-3 py-2 rounded transition">✕</button>
                 </div>
               </div>
             );
