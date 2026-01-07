@@ -46,13 +46,12 @@ export default function RoutineManager() {
     await addExercise(newExName, newExCat);
     setShowNewExForm(false);
     setNewExName('');
-    // Reload exercises
     const updated = await getExercises();
     setAllExercises(updated);
   };
 
   const handleDeleteExercise = async (e, id) => {
-    e.stopPropagation(); // Stop clicking the parent div
+    e.stopPropagation(); 
     if(confirm("Delete this custom exercise?")) {
         await deleteCustomExercise(id);
         const updated = await getExercises();
@@ -131,7 +130,6 @@ export default function RoutineManager() {
         const reps = savedEx.reps || 10;
         const fullEx = allExercises.find(e => String(e.id) === String(exId));
         
-        // If exercise was deleted, we might skip it or show unknown
         if (!fullEx) return null;
         return {
             id: fullEx.id,
@@ -198,12 +196,20 @@ export default function RoutineManager() {
 
       <div className={`p-4 rounded-lg border mb-8 transition-colors ${editingId ? 'bg-zinc-800 border-blue-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
         
-        {/* Day Selector */}
-        <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Day of Week</label>
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+        {/* NEW: Grid Layout for Days */}
+        <label className="block text-xs text-zinc-500 uppercase font-bold mb-2">Day of Week</label>
+        <div className="grid grid-cols-4 gap-2 mb-6">
           {DAYS.map(day => (
-            <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1 rounded text-sm whitespace-nowrap border ${selectedDay === day ? 'bg-white text-black border-white' : 'bg-black text-gray-400 border-zinc-700'}`}>
-              {day}
+            <button
+              key={day}
+              onClick={() => setSelectedDay(day)}
+              className={`py-2 rounded text-xs font-bold uppercase transition-all border ${
+                selectedDay === day 
+                  ? 'bg-white text-black border-white' 
+                  : 'bg-black text-zinc-500 border-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              {day.slice(0, 3)}
             </button>
           ))}
         </div>
