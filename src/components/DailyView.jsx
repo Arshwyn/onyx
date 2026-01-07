@@ -1,48 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import {
-  getRoutines, getExercises, addLog, getLogs, // Lifting
-  getBodyWeights, addBodyWeight,              // Body Weight
-  getCardioLogs, addCardioLog, deleteCardioLog, // Cardio
-  getCircumferences, addCircumference, deleteCircumference // Measurements
+import { 
+  getRoutines, getExercises, addLog, getLogs, 
+  getBodyWeights, addBodyWeight,              
+  getCardioLogs, addCardioLog, deleteCardioLog, 
+  getCircumferences, addCircumference, deleteCircumference 
 } from '../dataManager';
+import ConfirmModal from './ConfirmModal'; // Import the new component
 
 export default function DailyView() {
   const [loading, setLoading] = useState(true);
+  
+  // --- MODAL STATE ---
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isDestructive: false
+  });
 
   // --- DATES & NAVIGATION ---
-  const [todayDateStr, setTodayDateStr] = useState('');
-  const [viewDate, setViewDate] = useState(new Date());
-
+  const [todayDateStr, setTodayDateStr] = useState(''); 
+  const [viewDate, setViewDate] = useState(new Date()); 
+  
   // --- DATA STATE ---
-  const [currentRoutine, setCurrentRoutine] = useState(null);
-  const [exercises, setExercises] = useState([]);
-
+  const [currentRoutine, setCurrentRoutine] = useState(null); 
+  const [exercises, setExercises] = useState([]); 
+  
   // --- INPUT STATES ---
   const [setInputs, setSetInputs] = useState({});
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   const [lastPerformances, setLastPerformances] = useState({});
 
-  // --- BODY STATS (Weight + Measurements) ---
-  const [viewWeight, setViewWeight] = useState(null);
+  // --- BODY STATS ---
+  const [viewWeight, setViewWeight] = useState(null); 
   const [weightInput, setWeightInput] = useState('');
   const [viewMeasurements, setViewMeasurements] = useState([]);
   const [measurePart, setMeasurePart] = useState('Waist');
   const [measureValue, setMeasureValue] = useState('');
-
+  
   // --- CARDIO ---
-  const [viewCardioLogs, setViewCardioLogs] = useState([]);
-  const [routineCardio, setRoutineCardio] = useState([]);
+  const [viewCardioLogs, setViewCardioLogs] = useState([]); 
+  const [routineCardio, setRoutineCardio] = useState([]);     
   const [cardioType, setCardioType] = useState('Run');
-  const [cardioDuration, setCardioDuration] = useState('');
-  const [cardioDistance, setCardioDistance] = useState('');
+  const [cardioDuration, setCardioDuration] = useState(''); 
+  const [cardioDistance, setCardioDistance] = useState(''); 
   const [showCardioForm, setShowCardioForm] = useState(false);
 
   // --- REST DAY ---
   const [isAdHocRest, setIsAdHocRest] = useState(false);
 
   // --- SWAP STATE ---
-  const [isSwapped, setIsSwapped] = useState(false);
+  const [isSwapped, setIsSwapped] = useState(false); 
 
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
   const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
@@ -57,12 +67,17 @@ export default function DailyView() {
 
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
 
+  // --- HELPER: Open Confirm Modal ---
+  const openConfirm = (title, message, onConfirm, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
+  };
+
   // --- CORE DATA LOADER ---
   const loadView = async (targetDate) => {
     setLoading(true);
     const dateStr = getDateStr(targetDate);
     const dayName = DAYS[targetDate.getDay()];
-
+    
     // 1. Check Rest
     const restKey = `onyx_rest_${dateStr}`;
     const isRest = localStorage.getItem(restKey) === 'true';
@@ -70,12 +85,12 @@ export default function DailyView() {
 
     // 2. Fetch ALL Data
     const [weights, cLogs, allLogs, routines, allExercises, mData] = await Promise.all([
-      getBodyWeights(),
-      getCardioLogs(),
-      getLogs(),
-      getRoutines(),
-      getExercises(),
-      getCircumferences()
+        getBodyWeights(),
+        getCardioLogs(),
+        getLogs(),
+        getRoutines(),
+        getExercises(),
+        getCircumferences() 
     ]);
 
     // 3. Process Body Stats
@@ -97,26 +112,26 @@ export default function DailyView() {
     // 6. Routine Logic
     const swapKey = `onyx_swap_${dateStr}`;
     const swappedRoutineId = localStorage.getItem(swapKey);
-
+    
     let routine = null;
     if (swappedRoutineId) {
-      routine = routines.find(r => String(r.id) === String(swappedRoutineId));
-      setIsSwapped(!!routine);
-    }
+        routine = routines.find(r => String(r.id) === String(swappedRoutineId));
+        setIsSwapped(!!routine); 
+    } 
 
     if (!routine) {
-      routine = routines.find(r => r.day === dayName);
-      setIsSwapped(false);
+        routine = routines.find(r => r.day === dayName);
+        setIsSwapped(false);
     }
 
     setCurrentRoutine(routine || null);
-
+    
     if (routine) {
       setRoutineCardio(routine.cardio || []);
 
       const mergedData = routine.exercises.map(routineEx => {
         const exId = typeof routineEx === 'object' ? routineEx.id : routineEx;
-        const targetSets = routineEx.sets || 3;
+        const targetSets = routineEx.sets || 3; 
         const targetReps = routineEx.reps || 10;
         const fullExercise = allExercises.find(e => String(e.id) === String(exId));
         return fullExercise ? { ...fullExercise, targetSets, targetReps } : null;
@@ -136,18 +151,18 @@ export default function DailyView() {
       // History Stats
       const historyStats = {};
       mergedData.forEach(ex => {
-        const pastLogs = allLogs.filter(l =>
-          String(l.exercise_id || l.exerciseId) === String(ex.id) &&
-          new Date(l.date) < new Date(dateStr)
+        const pastLogs = allLogs.filter(l => 
+           String(l.exercise_id || l.exerciseId) === String(ex.id) && 
+           new Date(l.date) < new Date(dateStr) 
         );
         if (pastLogs.length > 0) {
           pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
-          const lastLog = pastLogs[0];
+          const lastLog = pastLogs[0]; 
           const sets = lastLog.sets || [];
           if (sets.length > 0) {
-            const bestSet = sets.reduce((prev, current) =>
+            const bestSet = sets.reduce((prev, current) => 
               (Number(current.weight) > Number(prev.weight) ? current : prev)
-              , sets[0]);
+            , sets[0]);
             historyStats[ex.id] = `${bestSet.weight} lbs x ${bestSet.reps}`;
           }
         }
@@ -176,22 +191,32 @@ export default function DailyView() {
 
   const handleSwapToToday = () => {
     if (!currentRoutine) return;
-    const confirmMsg = `Replace today's workout with ${currentRoutine.name}?`;
-    if (window.confirm(confirmMsg)) {
-      const now = new Date();
-      const todayStr = getDateStr(now);
-      localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id);
-      setViewDate(now);
-      loadView(now);
-    }
+    // USE CUSTOM MODAL
+    openConfirm(
+        'Swap Routine?',
+        `Do you want to replace today's workout with ${currentRoutine.name}?`,
+        () => {
+            const now = new Date();
+            const todayStr = getDateStr(now);
+            localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id);
+            setViewDate(now);
+            loadView(now);
+        }
+    );
   };
 
   const handleRevertSchedule = () => {
-    if (window.confirm("Revert to the original scheduled routine?")) {
-      const dateStr = getDateStr(viewDate);
-      localStorage.removeItem(`onyx_swap_${dateStr}`);
-      loadView(viewDate);
-    }
+    // USE CUSTOM MODAL
+    openConfirm(
+        'Revert Schedule?',
+        'This will go back to the original scheduled routine for today.',
+        () => {
+            const dateStr = getDateStr(viewDate);
+            localStorage.removeItem(`onyx_swap_${dateStr}`);
+            loadView(viewDate);
+        },
+        true // Destructive visual style
+    );
   };
 
   const handleToggleAdHocRest = () => {
@@ -218,21 +243,27 @@ export default function DailyView() {
     const dateStr = getDateStr(viewDate);
     await addCircumference(dateStr, measurePart, measureValue);
     setMeasureValue('');
-
+    
     // Refresh measurements
     const mData = await getCircumferences();
     const daysMeasurements = mData.filter(m => m.date === dateStr);
     setViewMeasurements(daysMeasurements);
   };
 
-  const handleDeleteMeasurement = async (id) => {
-    if (confirm("Delete this measurement?")) {
-      const dateStr = getDateStr(viewDate);
-      await deleteCircumference(id);
-      const mData = await getCircumferences();
-      const daysMeasurements = mData.filter(m => m.date === dateStr);
-      setViewMeasurements(daysMeasurements);
-    }
+  const handleDeleteMeasurement = (id) => {
+    // USE CUSTOM MODAL
+    openConfirm(
+        'Delete Measurement?',
+        'Are you sure you want to remove this entry?',
+        async () => {
+            const dateStr = getDateStr(viewDate);
+            await deleteCircumference(id);
+            const mData = await getCircumferences();
+            const daysMeasurements = mData.filter(m => m.date === dateStr);
+            setViewMeasurements(daysMeasurements);
+        },
+        true
+    );
   };
 
   // --- CARDIO ACTIONS ---
@@ -254,13 +285,19 @@ export default function DailyView() {
     setViewCardioLogs(todaysCardio);
   };
 
-  const handleDeleteCardio = async (id) => {
-    if (confirm("Remove this cardio session?")) {
-      const dateStr = getDateStr(viewDate);
-      const newLogs = await deleteCardioLog(id);
-      const todaysCardio = newLogs.filter(c => c.date === dateStr);
-      setViewCardioLogs(todaysCardio);
-    }
+  const handleDeleteCardio = (id) => {
+    // USE CUSTOM MODAL
+    openConfirm(
+        'Delete Session?',
+        'Remove this cardio log from your history?',
+        async () => {
+            const dateStr = getDateStr(viewDate);
+            const newLogs = await deleteCardioLog(id);
+            const todaysCardio = newLogs.filter(c => c.date === dateStr);
+            setViewCardioLogs(todaysCardio);
+        },
+        true
+    );
   };
 
   // --- LIFTING ACTIONS ---
@@ -268,7 +305,7 @@ export default function DailyView() {
     setSetInputs(prev => {
       const currentSets = [...prev[exId]];
       currentSets[index] = { ...currentSets[index], [field]: value };
-      if (index === 0) {
+      if (index === 0) { 
         for (let i = 1; i < currentSets.length; i++) {
           currentSets[i] = { ...currentSets[i], [field]: value };
         }
@@ -282,7 +319,7 @@ export default function DailyView() {
     if (!setsToLog) return;
     const validSets = setsToLog.filter(s => s.weight !== '');
     if (validSets.length === 0) return alert("Enter weight for at least one set.");
-
+    
     const dateStr = getDateStr(viewDate);
     const strId = String(exId);
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
@@ -303,7 +340,7 @@ export default function DailyView() {
   // --- RENDER HELPERS ---
   const viewDateStr = getDateStr(viewDate);
   const isToday = viewDateStr === todayDateStr;
-  const dayName = DAYS[viewDate.getDay()];
+  const dayName = DAYS[viewDate.getDay()]; 
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
@@ -314,45 +351,55 @@ export default function DailyView() {
 
   return (
     <div className="max-w-md mx-auto text-white pb-20">
+      
+      {/* MOUNT MODAL */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        isDestructive={modalConfig.isDestructive}
+      />
 
       {/* 1. NAVIGATION HEADER */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <div className="flex justify-between items-center mb-4">
-          <button onClick={() => changeDay(-1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
-          </button>
-          <div className="text-center">
-            <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center gap-2 justify-center">
-              {formattedDate}
-              {!isToday && (
-                <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">Today</button>
-              )}
+            <button onClick={() => changeDay(-1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <div className="text-center">
+                <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center gap-2 justify-center">
+                    {formattedDate} 
+                    {!isToday && (
+                        <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white">Today</button>
+                    )}
+                </div>
             </div>
-          </div>
-          <button onClick={() => changeDay(1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-          </button>
+            <button onClick={() => changeDay(1)} className="w-8 h-8 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
         </div>
         <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-3xl font-black italic uppercase">
-              {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
-            </h1>
-            {isSwapped && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped Routine</span>
-                <button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button>
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {!isToday && !isNoRoutine && !isScheduledRest && (
-              <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>
-            )}
-            {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
-              <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>
-            )}
-          </div>
+            <div>
+                <h1 className="text-3xl font-black italic uppercase">
+                    {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
+                </h1>
+                {isSwapped && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped Routine</span>
+                        <button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button>
+                    </div>
+                )}
+            </div>
+            <div className="flex gap-2">
+                {!isToday && !isNoRoutine && !isScheduledRest && (
+                    <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>
+                )}
+                {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
+                    <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>
+                )}
+            </div>
         </div>
       </div>
 
@@ -378,60 +425,57 @@ export default function DailyView() {
 
         {/* B. MEASUREMENTS (Always Visible) */}
         <div className="space-y-2">
-          {/* List of Logged Measurements (Green Style) */}
-          {viewMeasurements.map(m => (
-            <div key={m.id} className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
-                  {/* CHANGED: Now a Checkmark instead of an Equal Sign */}
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
+            {/* List of Logged Measurements */}
+            {viewMeasurements.map(m => (
+                <div key={m.id} className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <div>
+                            <span className="text-xs text-green-500 font-bold uppercase block">{m.body_part}</span>
+                            <span className="text-white font-bold">{m.measurement}</span>
+                        </div>
+                    </div>
+                    <button onClick={() => handleDeleteMeasurement(m.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
                 </div>
-                <div>
-                  <span className="text-xs text-green-500 font-bold uppercase block">{m.body_part}</span>
-                  <span className="text-white font-bold">{m.measurement}</span>
-                </div>
-              </div>
-              <button onClick={() => handleDeleteMeasurement(m.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
-            </div>
-          ))}
+            ))}
 
-          {/* Input Form (Always Visible) */}
-          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
-            <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
-            <div className="flex gap-2">
-              <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="w-1/3 bg-black border border-zinc-700 rounded p-2 text-white text-xs outline-none">
-                {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <input type="number" placeholder="Value" value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="flex-1 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
-              <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Log</button>
+            {/* Input Form */}
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
+                <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
+                <div className="flex gap-2">
+                    <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="w-1/3 bg-black border border-zinc-700 rounded p-2 text-white text-xs outline-none">
+                        {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <input type="number" placeholder="Value" value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="flex-1 bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+                    <button onClick={handleSaveMeasurement} className="bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Log</button>
+                </div>
             </div>
-          </div>
         </div>
       </div>
 
       {/* 3. CARDIO */}
       <div className="mb-8">
         {routineCardio.length > 0 && !isAdHocRest && (
-          <div className="mb-4">
-            <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
-            <div className="space-y-2">
-              {routineCardio.map((planned) => {
-                const isDone = viewCardioLogs.some(l => l.type === planned.type);
-                return (
-                  <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}><span className="text-xs font-bold">C</span></div>
-                      <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
-                    </div>
-                    {!isDone && <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>}
-                    {isDone && <span className="text-green-500 text-xs font-bold uppercase">Done</span>}
-                  </div>
-                );
-              })}
+            <div className="mb-4">
+                <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
+                <div className="space-y-2">
+                    {routineCardio.map((planned) => {
+                        const isDone = viewCardioLogs.some(l => l.type === planned.type);
+                        return (
+                            <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-full ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}><span className="text-xs font-bold">C</span></div>
+                                    <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
+                                </div>
+                                {!isDone && <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>}
+                                {isDone && <span className="text-green-500 text-xs font-bold uppercase">Done</span>}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
-          </div>
         )}
         {viewCardioLogs.length > 0 && (
           <div className="space-y-2 mb-2">
@@ -448,33 +492,33 @@ export default function DailyView() {
           </div>
         )}
         {!isAdHocRest && !showCardioForm && (
-          <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
+            <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
         )}
         {showCardioForm && (
-          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
-            <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
-            <div className="space-y-3">
-              <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-              <div className="flex gap-3"><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="-" /></div></div>
-              <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
+                <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
+                <div className="space-y-3">
+                    <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div className="flex gap-3"><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="-" /></div></div>
+                    <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
+                </div>
             </div>
-          </div>
         )}
       </div>
 
       {/* 4. MAIN EXERCISES */}
       {isAdHocRest ? (
         <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
-          <h2 className="text-2xl font-black italic uppercase text-white mb-2">Taking it Easy</h2>
-          <p className="text-zinc-500 text-sm mb-6">Recovery is when the growth happens.</p>
-          <button onClick={handleToggleAdHocRest} className="text-xs text-zinc-600 underline hover:text-white">No, I actually want to workout</button>
+            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
+            <h2 className="text-2xl font-black italic uppercase text-white mb-2">Taking it Easy</h2>
+            <p className="text-zinc-500 text-sm mb-6">Recovery is when the growth happens.</p>
+            <button onClick={handleToggleAdHocRest} className="text-xs text-zinc-600 underline hover:text-white">No, I actually want to workout</button>
         </div>
       ) : isScheduledRest ? (
         <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
-          <h2 className="text-2xl font-black italic uppercase text-white mb-2">Scheduled Rest</h2>
-          <p className="text-zinc-500 text-sm mb-6">Enjoy your day off.</p>
+            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
+            <h2 className="text-2xl font-black italic uppercase text-white mb-2">Scheduled Rest</h2>
+            <p className="text-zinc-500 text-sm mb-6">Enjoy your day off.</p>
         </div>
       ) : isNoRoutine ? (
         <div className="text-center mt-10 text-gray-500">
