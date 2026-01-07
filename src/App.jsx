@@ -8,16 +8,15 @@ import HistoryView from './components/HistoryView';
 import RoutineManager from './components/RoutineManager';
 import TrendsView from './components/TrendsView';
 import WorkoutLogger from './components/WorkoutLogger';
+import RestTimer from './components/RestTimer'; // <--- IMPORT THIS
 
 export default function App() {
   const [session, setSession] = useState(null);
   
-  // CHANGED: Initialize from localStorage (default to 'daily' if nothing saved)
   const [view, setView] = useState(() => {
     return localStorage.getItem('onyx_view') || 'daily';
   });
 
-  // CHANGED: Save to localStorage whenever view changes
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
@@ -67,6 +66,9 @@ export default function App() {
         {view === 'trends' && <TrendsView />}
         {view === 'log' && <WorkoutLogger />}
       </div>
+      
+      {/* Global Rest Timer Overlay */}
+      <RestTimer />
 
       {/* Sleek Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
