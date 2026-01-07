@@ -14,12 +14,10 @@ export default function App() {
   const [view, setView] = useState('daily'); // daily, history, manage, trends, log
 
   useEffect(() => {
-    // 1. Check active session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
 
-    // 2. Listen for login/logout events
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -33,21 +31,19 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
-  // If not logged in, show the Auth Page
   if (!session) {
     return <AuthPage />;
   }
 
-  // --- MAIN APP ---
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       
-      {/* Top Bar / Sign Out (Visible only on Manage tab for cleanliness, or globally) */}
+      {/* Sign Out (Visible on Manage tab) */}
       {view === 'manage' && (
         <div className="max-w-md mx-auto p-4 flex justify-end">
           <button 
             onClick={handleLogout}
-            className="text-xs text-red-400 hover:text-red-300 underline"
+            className="text-[10px] text-red-400 hover:text-red-300 border border-red-900/50 bg-red-900/10 px-3 py-1 rounded-full transition"
           >
             Sign Out
           </button>
@@ -55,7 +51,7 @@ export default function App() {
       )}
 
       {/* Content Area */}
-      <div className="p-4 pb-24"> {/* Added padding-bottom for navbar */}
+      <div className="p-4 pb-24">
         {view === 'daily' && <DailyView />}
         {view === 'history' && <HistoryView />}
         {view === 'manage' && <RoutineManager />}
@@ -63,14 +59,14 @@ export default function App() {
         {view === 'log' && <WorkoutLogger />}
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 safe-area-pb">
-        <div className="max-w-md mx-auto flex justify-around p-3">
-          <NavButton active={view === 'daily'} onClick={() => setView('daily')} icon="📅" label="Today" />
-          <NavButton active={view === 'log'} onClick={() => setView('log')} icon="✍️" label="Log" />
+      {/* Sleek Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
+        <div className="max-w-md mx-auto flex justify-between px-6 py-4">
+          <NavButton active={view === 'daily'} onClick={() => setView('daily')} icon="calendar" label="Today" />
+          <NavButton active={view === 'log'} onClick={() => setView('log')} icon="plus" label="Log" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon="clock" label="History" />
-          <NavButton active={view === 'trends'} onClick={() => setView('trends')} icon="📈" label="Trends" />
-          <NavButton active={view === 'manage'} onClick={() => setView('manage')} icon="⚙️" label="Manage" />
+          <NavButton active={view === 'trends'} onClick={() => setView('trends')} icon="chart" label="Trends" />
+          <NavButton active={view === 'manage'} onClick={() => setView('manage')} icon="settings" label="Manage" />
         </div>
       </nav>
     </div>
@@ -79,20 +75,49 @@ export default function App() {
 
 // Helper for Nav Icons
 function NavButton({ active, onClick, icon, label }) {
-    // Custom SVG icons for cleaner look
     const icons = {
-        clock: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        calendar: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+        ),
+        plus: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        ),
+        clock: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        ),
+        chart: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+        ),
+        settings: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        )
     };
 
     return (
       <button 
         onClick={onClick}
-        className={`flex flex-col items-center gap-1 transition-colors ${
-          active ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300'
+        className={`flex flex-col items-center gap-1.5 transition-all duration-300 group ${
+          active ? 'text-white scale-105' : 'text-zinc-600 hover:text-zinc-400'
         }`}
       >
-        <span className="text-xl h-6 flex items-center">{icons[icon] || icon}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wide">{label}</span>
+        <span className="relative">
+            {icons[icon] || icon}
+            {active && (
+                <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full animate-fade-in"></span>
+            )}
+        </span>
+        <span className="text-[9px] font-bold uppercase tracking-wider">{label}</span>
       </button>
     );
 }
