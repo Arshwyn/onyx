@@ -309,7 +309,6 @@ export default function DailyView() {
         return;
     }
     const dateStr = getDateStr(viewDate);
-    // Sanitize distance (empty string -> null)
     const dist = cardioDistance === '' ? null : cardioDistance;
     
     const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, dist);
@@ -461,11 +460,10 @@ export default function DailyView() {
             </div>
         ))}
 
-        {/* ADD MEASUREMENT FORM (Fixed Height/Layout) */}
+        {/* ADD MEASUREMENT FORM */}
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
             <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
             <div className="flex gap-2 w-full">
-                {/* Custom Select with arrow */}
                 <div className="flex-1 min-w-0 relative">
                     <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="w-full h-10 bg-black border border-zinc-700 rounded pl-3 pr-8 text-white text-sm outline-none appearance-none">
                         {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -474,11 +472,9 @@ export default function DailyView() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </div>
                 </div>
-                {/* Input */}
                 <div className="flex-1 min-w-0">
                     <input type="number" placeholder={measureUnit.toLowerCase()} value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="w-full h-10 bg-black border border-zinc-700 rounded px-3 text-white text-sm outline-none focus:border-blue-500 transition" />
                 </div>
-                {/* Button */}
                 <button onClick={handleSaveMeasurement} className="h-10 bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Log</button>
             </div>
         </div>
@@ -496,14 +492,7 @@ export default function DailyView() {
                         return (
                             <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full flex items-center justify-center w-8 h-8 ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}>
-                                        {isDone ? (
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                                        ) : (
-                                            // Heart Icon
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
-                                        )}
-                                    </div>
+                                    {/* Icon Removed - Just Text */}
                                     <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
                                 </div>
                                 {isDone ? (
@@ -518,16 +507,13 @@ export default function DailyView() {
             </div>
         )}
         
-        {/* Unplanned / Additional Cardio */}
         {unplannedCardio.length > 0 && (
           <div className="space-y-2 mb-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Additional Cardio</h3>
             {unplannedCardio.map(cardio => (
               <div key={cardio.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="bg-zinc-800 text-zinc-400 p-2 rounded-full"><span className="text-xs font-bold">✓</span></div>
-                  <div><span className="text-xs text-zinc-400 font-bold uppercase block">{cardio.type}</span><span className="text-zinc-300 text-sm">{cardio.duration} mins</span></div>
-                </div>
+                {/* Icon Removed */}
+                <div><span className="text-xs text-zinc-400 font-bold uppercase block">{cardio.type}</span><span className="text-zinc-300 text-sm">{cardio.duration} mins</span></div>
                 <button onClick={() => handleDeleteCardio(cardio.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
               </div>
             ))}
@@ -538,7 +524,6 @@ export default function DailyView() {
             <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
         )}
         
-        {/* New Cardio Form */}
         {showCardioForm && (
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
                 <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
@@ -546,7 +531,6 @@ export default function DailyView() {
                     <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                     <div className="flex gap-3">
                         <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div>
-                        {/* Dynamic Distance Placeholder */}
                         <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder={distUnit.toLowerCase()} /></div>
                     </div>
                     <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
@@ -575,24 +559,15 @@ export default function DailyView() {
               <div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}>
                   
-                  {/* EXERCISE HEADER: NEW LAYOUT WITH ICON */}
-                  <div className="flex-1 min-w-0 flex items-center gap-3">
-                    
-                    {/* Updated Dumbbell Icon */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isComplete ? 'bg-green-900/20 text-green-500' : 'bg-zinc-800 text-zinc-400'}`}>
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2V7H5zm14 0h-2v10h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM7 11h10v2H7z"></path></svg>
+                  {/* EXERCISE HEADER: CLEAN TEXT ONLY */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
+                        {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
                     </div>
-
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                            <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
-                            {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
-                        </div>
-                        <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
-                    </div>
+                    <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
                   </div>
                   
-                  {/* Right Side Actions / Info */}
                   <div className="text-right flex flex-col items-end gap-2 ml-2 flex-shrink-0">
                     {!isComplete && (
                         <div className="flex gap-1 mb-1">
