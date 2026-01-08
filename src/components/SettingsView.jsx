@@ -63,7 +63,9 @@ export default function SettingsView({ onNavigate }) {
 
   const handleTimerChange = (index, value) => {
     const newIncs = [...timerIncs];
-    newIncs[index] = parseInt(value) || 0;
+    // This handles the logic: empty string becomes 0 in state, 
+    // but the input view logic below hides that 0.
+    newIncs[index] = parseInt(value) || 0; 
     setTimerIncs(newIncs);
     localStorage.setItem('onyx_timer_incs', JSON.stringify(newIncs));
     window.dispatchEvent(new Event('storage'));
@@ -101,7 +103,7 @@ export default function SettingsView({ onNavigate }) {
       <div className="mb-6">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Interface</label>
         
-        {/* Rest Timer Card (Consolidated) */}
+        {/* Rest Timer Card */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-3">
             {/* Toggle Header */}
             <div className="p-4 flex justify-between items-center">
@@ -123,9 +125,11 @@ export default function SettingsView({ onNavigate }) {
                                 <label className="text-[9px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
                                 <input 
                                     type="number" 
-                                    value={val} 
+                                    // FIXED: If value is 0, show empty string
+                                    value={val === 0 ? '' : val} 
                                     onChange={(e) => handleTimerChange(idx, e.target.value)}
                                     className="w-full bg-transparent text-white text-center font-bold outline-none text-sm"
+                                    placeholder="0"
                                 />
                             </div>
                         ))}
@@ -137,7 +141,6 @@ export default function SettingsView({ onNavigate }) {
         {/* Confetti Toggle */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex justify-between items-center">
             <span className="text-sm font-bold text-gray-300">Celebrate PRs</span>
-            {/* CHANGED: Uses bg-blue-600 instead of yellow */}
             <button onClick={() => handleToggleConfetti(!showConfetti)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showConfetti ? 'bg-blue-600' : 'bg-zinc-700'}`}>
                 <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showConfetti ? 'translate-x-6' : 'translate-x-0'}`}></div>
             </button>
@@ -174,8 +177,15 @@ export default function SettingsView({ onNavigate }) {
 
       {/* 4. Account */}
       <div className="border-t border-zinc-800 pt-6">
-        <button onClick={handleLogout} className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition">Sign Out</button>
-        <div className="text-center mt-4"><span className="text-[10px] text-zinc-600">Onyx v1.2.0</span></div>
+        <button 
+          onClick={handleLogout}
+          className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition"
+        >
+          Sign Out
+        </button>
+        <div className="text-center mt-4">
+            <span className="text-[10px] text-zinc-600">Onyx v1.2.0</span>
+        </div>
       </div>
 
     </div>
