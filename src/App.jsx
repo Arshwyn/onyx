@@ -63,7 +63,7 @@ export default function App() {
       localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
       localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       
-      // NEW: Sync Timer Visibility
+      // Sync Timer Visibility
       const timerVisible = dbSettings.show_timer !== false; // Default to true if null
       localStorage.setItem('onyx_show_timer', timerVisible);
       
@@ -74,7 +74,7 @@ export default function App() {
         measure_unit: 'in',
         distance_unit: 'mi',
         timer_increments: [30, 60, 90],
-        show_timer: true // NEW Default
+        show_timer: true
       });
     }
   };

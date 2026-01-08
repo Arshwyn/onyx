@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getRoutines, getExercises, addLog, getLogs, 
+  getRoutines, getExercises, addLog, updateLog, getLogs, 
   getBodyWeights, addBodyWeight,              
   getCardioLogs, addCardioLog, deleteCardioLog, 
   getCircumferences, addCircumference, deleteCircumference 
@@ -33,6 +33,7 @@ export default function DailyView() {
   
   // --- INPUT STATES ---
   const [setInputs, setSetInputs] = useState({});
+  const [dailyLogs, setDailyLogs] = useState([]); // Store full log objects for editing
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   const [lastPerformances, setLastPerformances] = useState({});
@@ -93,9 +94,11 @@ export default function DailyView() {
   };
 
   // --- CORE DATA LOADER ---
-  const loadView = async (targetDate) => {
+  // FIXED: Added showLoading param to allow silent updates
+  const loadView = async (targetDate, showLoading = true) => {
     try {
-        setLoading(true);
+        if (showLoading) setLoading(true);
+        
         const dateStr = getDateStr(targetDate);
         const dayName = DAYS[targetDate.getDay()];
         
@@ -124,8 +127,9 @@ export default function DailyView() {
         const daysCardio = cLogs.filter(c => c.date === dateStr);
         setViewCardioLogs(daysCardio);
 
-        // 5. Process Logs
+        // 5. Process Logs (Lifting)
         const daysLogs = allLogs.filter(log => log.date === dateStr);
+        setDailyLogs(daysLogs); 
         const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
         setCompletedIds(doneIds);
 
@@ -154,17 +158,28 @@ export default function DailyView() {
                 const targetSets = routineEx.sets || 3; 
                 const targetReps = routineEx.reps || 10;
                 const fullExercise = allExercises.find(e => String(e.id) === String(exId));
-                return fullExercise ? { ...fullExercise, targetSets, targetReps } : null;
+                
+                // Check if log exists to pre-fill
+                const existingLog = daysLogs.find(l => String(l.exercise_id || l.exerciseId) === String(exId));
+                
+                return fullExercise ? { ...fullExercise, targetSets, targetReps, existingLog } : null;
             }).filter(ex => ex);
 
             setExercises(mergedData);
 
             const initialInputs = {};
             mergedData.forEach(ex => {
-                initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
-                weight: '',
-                reps: ex.targetReps
-                }));
+                if (ex.existingLog) {
+                    initialInputs[ex.id] = ex.existingLog.sets.map(s => ({
+                        weight: s.weight,
+                        reps: s.reps
+                    }));
+                } else {
+                    initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
+                        weight: '',
+                        reps: ex.targetReps
+                    }));
+                }
             });
             setSetInputs(initialInputs);
 
@@ -195,7 +210,7 @@ export default function DailyView() {
     } catch (error) {
         console.error("Critical Error Loading View:", error);
     } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
     }
   };
 
@@ -368,10 +383,22 @@ export default function DailyView() {
     
     const dateStr = getDateStr(viewDate);
     const strId = String(exId);
+
+    // Optimistic Update
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
 
-    await addLog(dateStr, exId, validSets);
+    // CHECK IF LOG EXISTS (Update vs Create)
+    const existingLog = dailyLogs.find(l => String(l.exercise_id || l.exerciseId) === strId);
+
+    if (existingLog) {
+        await updateLog({ ...existingLog, sets: validSets });
+    } else {
+        await addLog(dateStr, exId, validSets);
+    }
+
+    // FIXED: Use silent load to prevent UI flash
+    loadView(viewDate, false);
   };
 
   const toggleExpand = (exId) => {
@@ -391,7 +418,6 @@ export default function DailyView() {
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
   
-  // Filter out planned logs from the "Additional" list
   const unplannedCardio = viewCardioLogs.filter(log => !routineCardio.some(plan => plan.type === log.type));
 
   if (loading) {
@@ -492,7 +518,6 @@ export default function DailyView() {
                         return (
                             <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
                                 <div className="flex items-center gap-3">
-                                    {/* Icon Removed - Just Text */}
                                     <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
                                 </div>
                                 {isDone ? (
@@ -512,7 +537,6 @@ export default function DailyView() {
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Additional Cardio</h3>
             {unplannedCardio.map(cardio => (
               <div key={cardio.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
-                {/* Icon Removed */}
                 <div><span className="text-xs text-zinc-400 font-bold uppercase block">{cardio.type}</span><span className="text-zinc-300 text-sm">{cardio.duration} mins</span></div>
                 <button onClick={() => handleDeleteCardio(cardio.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
               </div>
@@ -559,7 +583,7 @@ export default function DailyView() {
               <div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}>
                   
-                  {/* EXERCISE HEADER: CLEAN TEXT ONLY */}
+                  {/* EXERCISE HEADER: TEXT ONLY (NO ICON) */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                         <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
