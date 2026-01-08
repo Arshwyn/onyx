@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { getUserSettings, updateUserSettings } from './dataManager'; // Import these
+import { getUserSettings, updateUserSettings } from './dataManager'; 
 import AuthPage from './components/AuthPage';
 
 // Components
@@ -23,14 +23,12 @@ export default function App() {
     localStorage.setItem('onyx_view', view);
   }, [view]);
 
-  // Handle Session & Settings Sync
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       if (session) await syncSettings();
     };
-
     initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -41,23 +39,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch DB settings and update LocalStorage so the UI reacts
   const syncSettings = async () => {
     const dbSettings = await getUserSettings();
     
     if (dbSettings) {
-      // Sync DB -> LocalStorage
       localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
       localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
-      localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       
-      // Dispatch event to update components immediately
+      // NEW: Sync Distance Unit
+      localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
+      
+      localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       window.dispatchEvent(new Event('storage'));
     } else {
-      // No settings in DB yet (first time user), create defaults
       await updateUserSettings({
         weight_unit: 'lbs',
         measure_unit: 'in',
+        distance_unit: 'mi', // NEW: Default
         timer_increments: [30, 60, 90]
       });
     }
@@ -67,7 +65,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
-      
       <div className="p-4 pb-24">
         {view === 'daily' && <DailyView />}
         {view === 'history' && <HistoryView />}
@@ -77,9 +74,7 @@ export default function App() {
         {view === 'settings' && <SettingsView onNavigate={setView} />}
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
       </div>
-      
       <RestTimer />
-
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
         <div className="max-w-md mx-auto flex justify-between px-6 py-4">
           <NavButton active={view === 'daily'} onClick={() => setView('daily')} icon="calendar" label="Today" />

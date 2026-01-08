@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { updateUserSettings } from '../dataManager'; // Import
+import { updateUserSettings } from '../dataManager'; 
 
 export default function SettingsView({ onNavigate }) {
   const [weightUnit, setWeightUnit] = useState('lbs');
   const [measureUnit, setMeasureUnit] = useState('in');
+  const [distUnit, setDistUnit] = useState('mi'); // NEW
   const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
-    // Load local storage first for speed
     setWeightUnit(localStorage.getItem('onyx_unit_weight') || 'lbs');
     setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
+    setDistUnit(localStorage.getItem('onyx_unit_distance') || 'mi'); // NEW
     
     const savedTimer = localStorage.getItem('onyx_timer_incs');
     if (savedTimer) setTimerIncs(JSON.parse(savedTimer));
@@ -23,11 +24,8 @@ export default function SettingsView({ onNavigate }) {
 
   const handleWeightChange = (unit) => {
     setWeightUnit(unit);
-    // 1. Update LocalStorage (Instant UI)
     localStorage.setItem('onyx_unit_weight', unit);
     window.dispatchEvent(new Event('storage'));
-    
-    // 2. Persist to DB (Background)
     updateUserSettings({ weight_unit: unit });
   };
 
@@ -35,18 +33,23 @@ export default function SettingsView({ onNavigate }) {
     setMeasureUnit(unit);
     localStorage.setItem('onyx_unit_measure', unit);
     window.dispatchEvent(new Event('storage'));
-    
     updateUserSettings({ measure_unit: unit });
+  };
+
+  // NEW HANDLER
+  const handleDistChange = (unit) => {
+    setDistUnit(unit);
+    localStorage.setItem('onyx_unit_distance', unit);
+    window.dispatchEvent(new Event('storage'));
+    updateUserSettings({ distance_unit: unit });
   };
 
   const handleTimerChange = (index, value) => {
     const newIncs = [...timerIncs];
     newIncs[index] = parseInt(value) || 0;
     setTimerIncs(newIncs);
-    
     localStorage.setItem('onyx_timer_incs', JSON.stringify(newIncs));
     window.dispatchEvent(new Event('storage'));
-    
     updateUserSettings({ timer_increments: newIncs });
   };
 
@@ -56,20 +59,14 @@ export default function SettingsView({ onNavigate }) {
 
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden animate-fade-in">
-      
-      {/* Header */}
       <div className="mb-8 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase">Settings</h1>
         <p className="text-zinc-500 text-xs">{userEmail}</p>
       </div>
 
-      {/* 1. Routines */}
       <div className="mb-6">
         <label className="text-xs text-blue-400 font-bold uppercase mb-2 block">Programming</label>
-        <button 
-          onClick={() => onNavigate('routine_manager')}
-          className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex justify-between items-center group hover:bg-zinc-800 transition"
-        >
+        <button onClick={() => onNavigate('routine_manager')} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex justify-between items-center group hover:bg-zinc-800 transition">
           <div className="flex items-center gap-3">
             <div className="bg-blue-900/20 text-blue-400 p-2 rounded-full">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -83,11 +80,11 @@ export default function SettingsView({ onNavigate }) {
         </button>
       </div>
 
-      {/* 2. Units */}
       <div className="mb-6">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Display Units</label>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
             
+            {/* Weight */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Weight</span>
                 <div className="flex bg-black p-1 rounded">
@@ -96,17 +93,26 @@ export default function SettingsView({ onNavigate }) {
                 </div>
             </div>
 
-            <div className="p-4 flex justify-between items-center">
+            {/* Measurements */}
+            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Measurements</span>
                 <div className="flex bg-black p-1 rounded">
                     <button onClick={() => handleMeasureChange('in')} className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'in' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>IN</button>
                     <button onClick={() => handleMeasureChange('cm')} className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'cm' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>CM</button>
                 </div>
             </div>
+
+            {/* NEW: Distance */}
+            <div className="p-4 flex justify-between items-center">
+                <span className="text-sm font-bold text-gray-300">Distance</span>
+                <div className="flex bg-black p-1 rounded">
+                    <button onClick={() => handleDistChange('mi')} className={`px-3 py-1 rounded text-xs font-bold transition ${distUnit === 'mi' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>MI</button>
+                    <button onClick={() => handleDistChange('km')} className={`px-3 py-1 rounded text-xs font-bold transition ${distUnit === 'km' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>KM</button>
+                </div>
+            </div>
         </div>
       </div>
 
-      {/* 3. Timer Defaults */}
       <div className="mb-8">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Timer Quick-Adds (Seconds)</label>
         <div className="grid grid-cols-3 gap-3">
@@ -124,19 +130,10 @@ export default function SettingsView({ onNavigate }) {
         </div>
       </div>
 
-      {/* 4. Account */}
       <div className="border-t border-zinc-800 pt-6">
-        <button 
-          onClick={handleLogout}
-          className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition"
-        >
-          Sign Out
-        </button>
-        <div className="text-center mt-4">
-            <span className="text-[10px] text-zinc-600">Onyx v1.2.0</span>
-        </div>
+        <button onClick={handleLogout} className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition">Sign Out</button>
+        <div className="text-center mt-4"><span className="text-[10px] text-zinc-600">Onyx v1.2.0</span></div>
       </div>
-
     </div>
   );
 }

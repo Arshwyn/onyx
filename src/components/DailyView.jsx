@@ -1,37 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import {
-  getRoutines, getExercises, addLog, getLogs,
-  getBodyWeights, addBodyWeight,
-  getCardioLogs, addCardioLog, deleteCardioLog,
-  getCircumferences, addCircumference, deleteCircumference
+import { 
+  getRoutines, getExercises, addLog, getLogs, 
+  getBodyWeights, addBodyWeight,              
+  getCardioLogs, addCardioLog, deleteCardioLog, 
+  getCircumferences, addCircumference, deleteCircumference 
 } from '../dataManager';
-import ConfirmModal from './ConfirmModal';
-import PlateCalculator from './PlateCalculator';
+import ConfirmModal from './ConfirmModal'; 
+import PlateCalculator from './PlateCalculator'; 
 
 export default function DailyView() {
   const [loading, setLoading] = useState(true);
-
+  
   // --- SETTINGS STATE ---
-  const [weightUnit, setWeightUnit] = useState('lbs');
-  const [measureUnit, setMeasureUnit] = useState('in');
-
-  // --- MODAL STATE ---
+  const [weightUnit, setWeightUnit] = useState('lbs'); 
+  const [measureUnit, setMeasureUnit] = useState('in'); 
+  const [distUnit, setDistUnit] = useState('mi'); 
+  
+  // --- MODAL & CALCULATOR STATE ---
   const [modalConfig, setModalConfig] = useState({
-    isOpen: false, title: '', message: '', onConfirm: () => { }, isDestructive: false
+    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
   });
-
-  // --- CALCULATOR STATE ---
   const [showCalc, setShowCalc] = useState(false);
   const [calcInitWeight, setCalcInitWeight] = useState('');
 
   // --- DATES & NAVIGATION ---
-  const [todayDateStr, setTodayDateStr] = useState('');
-  const [viewDate, setViewDate] = useState(new Date());
-
+  const [todayDateStr, setTodayDateStr] = useState(''); 
+  const [viewDate, setViewDate] = useState(new Date()); 
+  
   // --- DATA STATE ---
-  const [currentRoutine, setCurrentRoutine] = useState(null);
-  const [exercises, setExercises] = useState([]);
-
+  const [currentRoutine, setCurrentRoutine] = useState(null); 
+  const [exercises, setExercises] = useState([]); 
+  
   // --- INPUT STATES ---
   const [setInputs, setSetInputs] = useState({});
   const [completedIds, setCompletedIds] = useState([]);
@@ -39,25 +38,25 @@ export default function DailyView() {
   const [lastPerformances, setLastPerformances] = useState({});
 
   // --- BODY STATS ---
-  const [viewWeight, setViewWeight] = useState(null);
+  const [viewWeight, setViewWeight] = useState(null); 
   const [weightInput, setWeightInput] = useState('');
   const [viewMeasurements, setViewMeasurements] = useState([]);
   const [measurePart, setMeasurePart] = useState('Waist');
   const [measureValue, setMeasureValue] = useState('');
-
+  
   // --- CARDIO ---
-  const [viewCardioLogs, setViewCardioLogs] = useState([]);
-  const [routineCardio, setRoutineCardio] = useState([]);
+  const [viewCardioLogs, setViewCardioLogs] = useState([]); 
+  const [routineCardio, setRoutineCardio] = useState([]);     
   const [cardioType, setCardioType] = useState('Run');
-  const [cardioDuration, setCardioDuration] = useState('');
-  const [cardioDistance, setCardioDistance] = useState('');
+  const [cardioDuration, setCardioDuration] = useState(''); 
+  const [cardioDistance, setCardioDistance] = useState(''); 
   const [showCardioForm, setShowCardioForm] = useState(false);
 
   // --- REST DAY ---
   const [isAdHocRest, setIsAdHocRest] = useState(false);
 
   // --- SWAP STATE ---
-  const [isSwapped, setIsSwapped] = useState(false);
+  const [isSwapped, setIsSwapped] = useState(false); 
 
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
   const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
@@ -69,15 +68,17 @@ export default function DailyView() {
     setTodayDateStr(dateStr);
     loadView(now);
 
-    const loadUnits = () => {
-      const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
-      setWeightUnit(w.toLowerCase());
-      const m = localStorage.getItem('onyx_unit_measure') || 'in';
-      setMeasureUnit(m.toLowerCase());
+    const loadSettings = () => {
+        const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
+        setWeightUnit(w.toLowerCase());
+        const m = localStorage.getItem('onyx_unit_measure') || 'in';
+        setMeasureUnit(m.toLowerCase());
+        const d = localStorage.getItem('onyx_unit_distance') || 'mi';
+        setDistUnit(d.toLowerCase());
     };
-    loadUnits();
-    window.addEventListener('storage', loadUnits);
-    return () => window.removeEventListener('storage', loadUnits);
+    loadSettings();
+    window.addEventListener('storage', loadSettings);
+    return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
@@ -91,117 +92,116 @@ export default function DailyView() {
     setShowCalc(true);
   };
 
-  // --- CORE DATA LOADER (FIXED) ---
+  // --- CORE DATA LOADER ---
   const loadView = async (targetDate) => {
     try {
-      setLoading(true);
-      const dateStr = getDateStr(targetDate);
-      const dayName = DAYS[targetDate.getDay()];
+        setLoading(true);
+        const dateStr = getDateStr(targetDate);
+        const dayName = DAYS[targetDate.getDay()];
+        
+        // 1. Check Rest
+        const restKey = `onyx_rest_${dateStr}`;
+        const isRest = localStorage.getItem(restKey) === 'true';
+        setIsAdHocRest(isRest);
 
-      // 1. Check Rest
-      const restKey = `onyx_rest_${dateStr}`;
-      const isRest = localStorage.getItem(restKey) === 'true';
-      setIsAdHocRest(isRest);
+        // 2. Fetch ALL Data
+        const [weights, cLogs, allLogs, routines, allExercises, mData] = await Promise.all([
+            getBodyWeights(),
+            getCardioLogs(),
+            getLogs(),
+            getRoutines(),
+            getExercises(),
+            getCircumferences() 
+        ]);
 
-      // 2. Fetch ALL Data
-      const [weights, cLogs, allLogs, routines, allExercises, mData] = await Promise.all([
-        getBodyWeights(),
-        getCardioLogs(),
-        getLogs(),
-        getRoutines(),
-        getExercises(),
-        getCircumferences()
-      ]);
+        // 3. Process Body Stats
+        const existingWeight = weights.find(w => w.date === dateStr);
+        setViewWeight(existingWeight ? existingWeight.weight : null);
+        const daysMeasurements = mData.filter(m => m.date === dateStr);
+        setViewMeasurements(daysMeasurements);
 
-      // 3. Process Body Stats
-      const existingWeight = weights.find(w => w.date === dateStr);
-      setViewWeight(existingWeight ? existingWeight.weight : null);
-      const daysMeasurements = mData.filter(m => m.date === dateStr);
-      setViewMeasurements(daysMeasurements);
+        // 4. Process Cardio
+        const daysCardio = cLogs.filter(c => c.date === dateStr);
+        setViewCardioLogs(daysCardio);
 
-      // 4. Process Cardio
-      const daysCardio = cLogs.filter(c => c.date === dateStr);
-      setViewCardioLogs(daysCardio);
+        // 5. Process Logs
+        const daysLogs = allLogs.filter(log => log.date === dateStr);
+        const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
+        setCompletedIds(doneIds);
 
-      // 5. Process Logs
-      const daysLogs = allLogs.filter(log => log.date === dateStr);
-      const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
-      setCompletedIds(doneIds);
+        // 6. Routine Logic
+        const swapKey = `onyx_swap_${dateStr}`;
+        const swappedRoutineId = localStorage.getItem(swapKey);
+        
+        let routine = null;
+        if (swappedRoutineId) {
+            routine = routines.find(r => String(r.id) === String(swappedRoutineId));
+            setIsSwapped(!!routine); 
+        } 
 
-      // 6. Routine Logic
-      const swapKey = `onyx_swap_${dateStr}`;
-      const swappedRoutineId = localStorage.getItem(swapKey);
+        if (!routine) {
+            routine = routines.find(r => r.day === dayName);
+            setIsSwapped(false);
+        }
 
-      let routine = null;
-      if (swappedRoutineId) {
-        routine = routines.find(r => String(r.id) === String(swappedRoutineId));
-        setIsSwapped(!!routine);
-      }
+        setCurrentRoutine(routine || null);
+        
+        if (routine) {
+            setRoutineCardio(routine.cardio || []);
 
-      if (!routine) {
-        routine = routines.find(r => r.day === dayName);
-        setIsSwapped(false);
-      }
+            const mergedData = routine.exercises.map(routineEx => {
+                const exId = typeof routineEx === 'object' ? routineEx.id : routineEx;
+                const targetSets = routineEx.sets || 3; 
+                const targetReps = routineEx.reps || 10;
+                const fullExercise = allExercises.find(e => String(e.id) === String(exId));
+                return fullExercise ? { ...fullExercise, targetSets, targetReps } : null;
+            }).filter(ex => ex);
 
-      setCurrentRoutine(routine || null);
+            setExercises(mergedData);
 
-      if (routine) {
-        setRoutineCardio(routine.cardio || []);
+            const initialInputs = {};
+            mergedData.forEach(ex => {
+                initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
+                weight: '',
+                reps: ex.targetReps
+                }));
+            });
+            setSetInputs(initialInputs);
 
-        const mergedData = routine.exercises.map(routineEx => {
-          const exId = typeof routineEx === 'object' ? routineEx.id : routineEx;
-          const targetSets = routineEx.sets || 3;
-          const targetReps = routineEx.reps || 10;
-          const fullExercise = allExercises.find(e => String(e.id) === String(exId));
-          return fullExercise ? { ...fullExercise, targetSets, targetReps } : null;
-        }).filter(ex => ex);
-
-        setExercises(mergedData);
-
-        const initialInputs = {};
-        mergedData.forEach(ex => {
-          initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({
-            weight: '',
-            reps: ex.targetReps
-          }));
-        });
-        setSetInputs(initialInputs);
-
-        // History Stats
-        const historyStats = {};
-        mergedData.forEach(ex => {
-          const pastLogs = allLogs.filter(l =>
-            String(l.exercise_id || l.exerciseId) === String(ex.id) &&
-            new Date(l.date) < new Date(dateStr)
-          );
-          if (pastLogs.length > 0) {
-            pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const lastLog = pastLogs[0];
-            const sets = lastLog.sets || [];
-            if (sets.length > 0) {
-              const bestSet = sets.reduce((prev, current) =>
-                (Number(current.weight) > Number(prev.weight) ? current : prev)
-                , sets[0]);
-              historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
-            }
-          }
-        });
-        setLastPerformances(historyStats);
-      } else {
-        setExercises([]);
-        setRoutineCardio([]);
-      }
+            // History Stats
+            const historyStats = {};
+            mergedData.forEach(ex => {
+                const pastLogs = allLogs.filter(l => 
+                String(l.exercise_id || l.exerciseId) === String(ex.id) && 
+                new Date(l.date) < new Date(dateStr) 
+                );
+                if (pastLogs.length > 0) {
+                pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+                const lastLog = pastLogs[0]; 
+                const sets = lastLog.sets || [];
+                if (sets.length > 0) {
+                    const bestSet = sets.reduce((prev, current) => 
+                    (Number(current.weight) > Number(prev.weight) ? current : prev)
+                    , sets[0]);
+                    historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
+                }
+                }
+            });
+            setLastPerformances(historyStats);
+        } else {
+            setExercises([]);
+            setRoutineCardio([]);
+        }
     } catch (error) {
-      console.error("Critical Error Loading View:", error);
-      // Optional: you can show an alert here if you want
+        console.error("Critical Error Loading View:", error);
     } finally {
-      setLoading(false); // ALWAYS runs
+        setLoading(false);
     }
   };
 
   // --- REORDER LOGIC ---
   const moveExercise = (index, direction, e) => {
-    e.stopPropagation();
+    e.stopPropagation(); 
     if (direction === -1 && index === 0) return;
     if (direction === 1 && index === exercises.length - 1) return;
 
@@ -209,7 +209,7 @@ export default function DailyView() {
     const temp = newOrder[index];
     newOrder[index] = newOrder[index + direction];
     newOrder[index + direction] = temp;
-
+    
     setExercises(newOrder);
   };
 
@@ -230,28 +230,28 @@ export default function DailyView() {
   const handleSwapToToday = () => {
     if (!currentRoutine) return;
     openConfirm(
-      'Swap Routine?',
-      `Do you want to replace today's workout with ${currentRoutine.name}?`,
-      () => {
-        const now = new Date();
-        const todayStr = getDateStr(now);
-        localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id);
-        setViewDate(now);
-        loadView(now);
-      }
+        'Swap Routine?',
+        `Do you want to replace today's workout with ${currentRoutine.name}?`,
+        () => {
+            const now = new Date();
+            const todayStr = getDateStr(now);
+            localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id);
+            setViewDate(now);
+            loadView(now);
+        }
     );
   };
 
   const handleRevertSchedule = () => {
     openConfirm(
-      'Revert Schedule?',
-      'This will go back to the original scheduled routine for today.',
-      () => {
-        const dateStr = getDateStr(viewDate);
-        localStorage.removeItem(`onyx_swap_${dateStr}`);
-        loadView(viewDate);
-      },
-      true
+        'Revert Schedule?',
+        'This will go back to the original scheduled routine for today.',
+        () => {
+            const dateStr = getDateStr(viewDate);
+            localStorage.removeItem(`onyx_swap_${dateStr}`);
+            loadView(viewDate);
+        },
+        true 
     );
   };
 
@@ -276,8 +276,8 @@ export default function DailyView() {
 
   const handleSaveMeasurement = async () => {
     if (!measureValue) {
-      openConfirm("Missing Value", "Please enter a measurement value before saving.");
-      return;
+        openConfirm("Missing Value", "Please enter a measurement value before saving.");
+        return;
     }
     const dateStr = getDateStr(viewDate);
     await addCircumference(dateStr, measurePart, measureValue);
@@ -289,28 +289,29 @@ export default function DailyView() {
 
   const handleDeleteMeasurement = (id) => {
     openConfirm(
-      'Delete Measurement?',
-      'Are you sure you want to remove this entry?',
-      async () => {
-        const dateStr = getDateStr(viewDate);
-        await deleteCircumference(id);
-        const mData = await getCircumferences();
-        const daysMeasurements = mData.filter(m => m.date === dateStr);
-        setViewMeasurements(daysMeasurements);
-      },
-      true
+        'Delete Measurement?',
+        'Are you sure you want to remove this entry?',
+        async () => {
+            const dateStr = getDateStr(viewDate);
+            await deleteCircumference(id);
+            const mData = await getCircumferences();
+            const daysMeasurements = mData.filter(m => m.date === dateStr);
+            setViewMeasurements(daysMeasurements);
+        },
+        true
     );
   };
 
   // --- CARDIO ACTIONS ---
   const handleSaveCardio = async () => {
     if (!cardioDuration) {
-      openConfirm("Missing Duration", "Please enter a duration in minutes.");
-      return;
+        openConfirm("Missing Duration", "Please enter a duration in minutes.");
+        return;
     }
     const dateStr = getDateStr(viewDate);
+    // Sanitize distance (empty string -> null)
     const dist = cardioDistance === '' ? null : cardioDistance;
-
+    
     const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, dist);
     const todaysCardio = newLogs.filter(c => c.date === dateStr);
     setViewCardioLogs(todaysCardio);
@@ -330,15 +331,15 @@ export default function DailyView() {
 
   const handleDeleteCardio = (id) => {
     openConfirm(
-      'Delete Session?',
-      'Remove this cardio log from your history?',
-      async () => {
-        const dateStr = getDateStr(viewDate);
-        const newLogs = await deleteCardioLog(id);
-        const todaysCardio = newLogs.filter(c => c.date === dateStr);
-        setViewCardioLogs(todaysCardio);
-      },
-      true
+        'Delete Session?',
+        'Remove this cardio log from your history?',
+        async () => {
+            const dateStr = getDateStr(viewDate);
+            const newLogs = await deleteCardioLog(id);
+            const todaysCardio = newLogs.filter(c => c.date === dateStr);
+            setViewCardioLogs(todaysCardio);
+        },
+        true
     );
   };
 
@@ -347,7 +348,7 @@ export default function DailyView() {
     setSetInputs(prev => {
       const currentSets = [...prev[exId]];
       currentSets[index] = { ...currentSets[index], [field]: value };
-      if (index === 0) {
+      if (index === 0) { 
         for (let i = 1; i < currentSets.length; i++) {
           currentSets[i] = { ...currentSets[i], [field]: value };
         }
@@ -360,12 +361,12 @@ export default function DailyView() {
     const setsToLog = setInputs[exId];
     if (!setsToLog) return;
     const validSets = setsToLog.filter(s => s.weight !== '');
-
+    
     if (validSets.length === 0) {
-      openConfirm("Empty Log", "Please enter weight for at least one set.", null, true);
-      return;
+        openConfirm("Empty Log", "Please enter weight for at least one set.", null, true);
+        return;
     }
-
+    
     const dateStr = getDateStr(viewDate);
     const strId = String(exId);
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
@@ -386,10 +387,12 @@ export default function DailyView() {
   // --- RENDER HELPERS ---
   const viewDateStr = getDateStr(viewDate);
   const isToday = viewDateStr === todayDateStr;
-  const dayName = DAYS[viewDate.getDay()];
+  const dayName = DAYS[viewDate.getDay()]; 
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
+  
+  // Filter out planned logs from the "Additional" list
   const unplannedCardio = viewCardioLogs.filter(log => !routineCardio.some(plan => plan.type === log.type));
 
   if (loading) {
@@ -398,61 +401,32 @@ export default function DailyView() {
 
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
-
-      <ConfirmModal
-        isOpen={modalConfig.isOpen}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        onConfirm={modalConfig.onConfirm}
-        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
-        isDestructive={modalConfig.isDestructive}
-      />
-
-      <PlateCalculator
-        isOpen={showCalc}
-        onClose={() => setShowCalc(false)}
-        initialWeight={calcInitWeight}
-        unit={weightUnit}
-      />
+      
+      {/* GLOBAL MODALS */}
+      <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
+      <PlateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} initialWeight={calcInitWeight} unit={weightUnit} />
 
       {/* 1. NAVIGATION HEADER */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <div className="flex justify-between items-center mb-4 px-1">
-          <button onClick={() => changeDay(-1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
-          </button>
-          <div className="text-center flex-1 mx-2">
-            <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center justify-center gap-2">
-              {formattedDate}
-              {!isToday && (
-                <button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white whitespace-nowrap">Today</button>
-              )}
+            <button onClick={() => changeDay(-1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
+            <div className="text-center flex-1 mx-2">
+                <div className="text-xs text-blue-400 font-bold uppercase tracking-wider flex items-center justify-center gap-2">
+                    {formattedDate} 
+                    {!isToday && (<button onClick={jumpToToday} className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700 hover:text-white whitespace-nowrap">Today</button>)}
+                </div>
             </div>
-          </div>
-          <button onClick={() => changeDay(1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-          </button>
+            <button onClick={() => changeDay(1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
         </div>
         <div className="flex justify-between items-end px-1">
-          <div className="flex-1 min-w-0 pr-2">
-            <h1 className="text-3xl font-black italic uppercase truncate">
-              {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
-            </h1>
-            {isSwapped && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped</span>
-                <button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button>
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            {!isToday && !isNoRoutine && !isScheduledRest && (
-              <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>
-            )}
-            {!isScheduledRest && !isNoRoutine && !isAdHocRest && (
-              <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>
-            )}
-          </div>
+            <div className="flex-1 min-w-0 pr-2">
+                <h1 className="text-3xl font-black italic uppercase truncate">{isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}</h1>
+                {isSwapped && <div className="flex items-center gap-2 mt-1"><span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped</span><button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button></div>}
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+                {!isToday && !isNoRoutine && !isScheduledRest && <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>}
+                {!isScheduledRest && !isNoRoutine && !isAdHocRest && <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>}
+            </div>
         </div>
       </div>
 
@@ -476,104 +450,75 @@ export default function DailyView() {
           </div>
         )}
 
-        {/* MEASUREMENTS */}
-        <div className="space-y-2">
-          {viewMeasurements.map(m => (
+        {/* MEASUREMENTS LIST */}
+        {viewMeasurements.map(m => (
             <div key={m.id} className="bg-zinc-900/50 border border-green-900/50 p-3 rounded-lg flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-900/20 text-green-500 p-2 rounded-full">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                <div className="flex items-center gap-3">
+                    <div className="bg-green-900/20 text-green-500 p-2 rounded-full"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg></div>
+                    <div><span className="text-xs text-green-500 font-bold uppercase block">{m.body_part}</span><span className="text-white font-bold">{m.measurement} <span className="text-[10px] text-zinc-500 font-normal">{measureUnit.toLowerCase()}</span></span></div>
                 </div>
-                <div>
-                  <span className="text-xs text-green-500 font-bold uppercase block">{m.body_part}</span>
-                  <span className="text-white font-bold">{m.measurement} <span className="text-[10px] text-zinc-500 font-normal">{measureUnit.toLowerCase()}</span></span>
-                </div>
-              </div>
-              <button onClick={() => handleDeleteMeasurement(m.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
+                <button onClick={() => handleDeleteMeasurement(m.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
             </div>
-          ))}
+        ))}
 
-          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
+        {/* ADD MEASUREMENT FORM (Fixed Height/Layout) */}
+        <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
             <label className="text-xs text-zinc-500 font-bold uppercase block mb-2">Add Measurement</label>
             <div className="flex gap-2 w-full">
-
-              {/* DROPDOWN WRAPPER (Relative for custom arrow) */}
-              <div className="flex-1 min-w-0 relative">
-                <select
-                  value={measurePart}
-                  onChange={(e) => setMeasurePart(e.target.value)}
-                  className="w-full h-10 bg-black border border-zinc-700 rounded pl-3 pr-8 text-white text-sm outline-none appearance-none"
-                >
-                  {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                {/* CUSTOM ARROW ICON */}
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                {/* Custom Select with arrow */}
+                <div className="flex-1 min-w-0 relative">
+                    <select value={measurePart} onChange={(e) => setMeasurePart(e.target.value)} className="w-full h-10 bg-black border border-zinc-700 rounded pl-3 pr-8 text-white text-sm outline-none appearance-none">
+                        {BODY_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
                 </div>
-              </div>
-
-              {/* INPUT */}
-              <div className="flex-1 min-w-0">
-                <input
-                  type="number"
-                  placeholder={measureUnit.toLowerCase()}
-                  value={measureValue}
-                  onChange={(e) => setMeasureValue(e.target.value)}
-                  className="w-full h-10 bg-black border border-zinc-700 rounded px-3 text-white text-sm outline-none focus:border-blue-500 transition"
-                />
-              </div>
-
-              {/* BUTTON */}
-              <button
-                onClick={handleSaveMeasurement}
-                className="h-10 bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition"
-              >
-                Log
-              </button>
+                {/* Input */}
+                <div className="flex-1 min-w-0">
+                    <input type="number" placeholder={measureUnit.toLowerCase()} value={measureValue} onChange={(e) => setMeasureValue(e.target.value)} className="w-full h-10 bg-black border border-zinc-700 rounded px-3 text-white text-sm outline-none focus:border-blue-500 transition" />
+                </div>
+                {/* Button */}
+                <button onClick={handleSaveMeasurement} className="h-10 bg-white text-black font-bold px-4 rounded text-sm hover:bg-gray-200 transition">Log</button>
             </div>
-          </div>
         </div>
       </div>
 
       {/* 3. CARDIO */}
       <div className="mb-8">
         {routineCardio.length > 0 && !isAdHocRest && (
-          <div className="mb-4">
-            <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
-            <div className="space-y-2">
-              {routineCardio.map((planned) => {
-                const matchedLog = viewCardioLogs.find(l => l.type === planned.type);
-                const isDone = !!matchedLog;
-
-                return (
-                  <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full flex items-center justify-center w-8 h-8 ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}>
-                        {isDone ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                        ) : (
-                          <span className="text-xs font-bold">C</span>
-                        )}
-                      </div>
-                      <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
-                    </div>
-                    {isDone ? (
-                      <button
-                        onClick={() => handleDeleteCardio(matchedLog.id)}
-                        className="text-[10px] text-green-600 hover:text-red-500 font-bold uppercase tracking-wider flex items-center gap-1"
-                      >
-                        Done <span className="text-zinc-600 hover:text-red-500">✕</span>
-                      </button>
-                    ) : (
-                      <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="mb-4">
+                <h3 className="text-xs text-blue-400 font-bold uppercase mb-2">Planned Cardio</h3>
+                <div className="space-y-2">
+                    {routineCardio.map((planned) => {
+                        const matchedLog = viewCardioLogs.find(l => l.type === planned.type);
+                        const isDone = !!matchedLog;
+                        return (
+                            <div key={planned.id} className={`p-3 rounded-lg border flex justify-between items-center ${isDone ? 'bg-zinc-900 border-green-900/50 opacity-70' : 'bg-zinc-900 border-blue-900/30'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-full flex items-center justify-center w-8 h-8 ${isDone ? 'bg-green-900/20 text-green-500' : 'bg-blue-900/20 text-blue-400'}`}>
+                                        {isDone ? (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                        ) : (
+                                            // Heart Icon
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                                        )}
+                                    </div>
+                                    <div><span className={`text-xs font-bold uppercase block ${isDone ? 'text-green-500 line-through' : 'text-blue-400'}`}>{planned.type}</span><span className="text-white font-bold text-sm">Target: {planned.duration}m</span></div>
+                                </div>
+                                {isDone ? (
+                                    <button onClick={() => handleDeleteCardio(matchedLog.id)} className="text-[10px] text-green-600 hover:text-red-500 font-bold uppercase tracking-wider flex items-center gap-1">Done <span className="text-zinc-600 hover:text-red-500">✕</span></button>
+                                ) : (
+                                    <button onClick={() => handleCompletePlannedCardio(planned)} className="bg-white text-black font-bold text-xs px-3 py-1.5 rounded hover:bg-gray-200">Log</button>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
-          </div>
         )}
-
+        
+        {/* Unplanned / Additional Cardio */}
         {unplannedCardio.length > 0 && (
           <div className="space-y-2 mb-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-1">Additional Cardio</h3>
@@ -590,39 +535,33 @@ export default function DailyView() {
         )}
 
         {!isAdHocRest && !showCardioForm && (
-          <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
+            <button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>
         )}
+        
+        {/* New Cardio Form */}
         {showCardioForm && (
-          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
-            <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
-            <div className="space-y-3">
-              <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-              <div className="flex gap-3"><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="-" /></div></div>
-              <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in">
+                <div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div>
+                <div className="space-y-3">
+                    <div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div className="flex gap-3">
+                        <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div>
+                        {/* Dynamic Distance Placeholder */}
+                        <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder={distUnit.toLowerCase()} /></div>
+                    </div>
+                    <button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button>
+                </div>
             </div>
-          </div>
         )}
       </div>
 
       {/* 4. MAIN EXERCISES */}
       {isAdHocRest ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
-          <h2 className="text-2xl font-black italic uppercase text-white mb-2">Taking it Easy</h2>
-          <p className="text-zinc-500 text-sm mb-6">Recovery is when the growth happens.</p>
-          <button onClick={handleToggleAdHocRest} className="text-xs text-zinc-600 underline hover:text-white">No, I actually want to workout</button>
-        </div>
+        <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800"><div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div><h2 className="text-2xl font-black italic uppercase text-white mb-2">Taking it Easy</h2><p className="text-zinc-500 text-sm mb-6">Recovery is when the growth happens.</p><button onClick={handleToggleAdHocRest} className="text-xs text-zinc-600 underline hover:text-white">No, I actually want to workout</button></div>
       ) : isScheduledRest ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div>
-          <h2 className="text-2xl font-black italic uppercase text-white mb-2">Scheduled Rest</h2>
-          <p className="text-zinc-500 text-sm mb-6">Enjoy your day off.</p>
-        </div>
+        <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800"><div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div><h2 className="text-2xl font-black italic uppercase text-white mb-2">Scheduled Rest</h2><p className="text-zinc-500 text-sm mb-6">Enjoy your day off.</p></div>
       ) : isNoRoutine ? (
-        <div className="text-center mt-10 text-gray-500">
-          <p>No routine scheduled for {dayName}.</p>
-          <p className="text-xs mt-4">Go to "Manage" to set up a routine.</p>
-        </div>
+        <div className="text-center mt-10 text-gray-500"><p>No routine scheduled for {dayName}.</p><p className="text-xs mt-4">Go to "Manage" to set up a routine.</p></div>
       ) : (
         <div className="space-y-4">
           {exercises.map((ex, idx) => {
@@ -635,20 +574,31 @@ export default function DailyView() {
             return (
               <div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
                 <div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
-                      {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
+                  
+                  {/* EXERCISE HEADER: NEW LAYOUT WITH ICON */}
+                  <div className="flex-1 min-w-0 flex items-center gap-3">
+                    
+                    {/* Updated Dumbbell Icon */}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isComplete ? 'bg-green-900/20 text-green-500' : 'bg-zinc-800 text-zinc-400'}`}>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2V7H5zm14 0h-2v10h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM7 11h10v2H7z"></path></svg>
                     </div>
-                    <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
-                  </div>
 
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>
+                            {isComplete && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}
+                        </div>
+                        <span className="text-xs text-gray-500 uppercase">{ex.category}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Right Side Actions / Info */}
                   <div className="text-right flex flex-col items-end gap-2 ml-2 flex-shrink-0">
                     {!isComplete && (
-                      <div className="flex gap-1 mb-1">
-                        <button onClick={(e) => moveExercise(idx, -1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg></button>
-                        <button onClick={(e) => moveExercise(idx, 1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></button>
-                      </div>
+                        <div className="flex gap-1 mb-1">
+                           <button onClick={(e) => moveExercise(idx, -1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg></button>
+                           <button onClick={(e) => moveExercise(idx, 1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></button>
+                        </div>
                     )}
                     {isComplete ? (
                       <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">{isExpanded ? 'Hide' : 'Show'} <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span></div>
@@ -671,17 +621,19 @@ export default function DailyView() {
                       {setInputs[ex.id]?.map((set, idx) => (
                         <div key={idx} className="flex gap-3 items-center">
                           <div className="w-8 text-center text-zinc-600 font-bold text-sm">{idx + 1}</div>
+                          
+                          {/* Weight Input with Calculator */}
                           <div className="flex-1 relative">
-                            {/* CALCULATOR BUTTON ADDED HERE */}
                             <input type="number" placeholder="-" value={set.weight} onChange={(e) => handleSetChange(ex.id, idx, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" />
-                            <button
-                              onClick={() => openCalculator(set.weight)}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            <button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                             </button>
                           </div>
-                          <div className="flex-1"><input type="number" placeholder="-" value={set.reps} onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" /></div>
+
+                          {/* Reps Input (Wrapped in flex-1) */}
+                          <div className="flex-1">
+                            <input type="number" placeholder="-" value={set.reps} onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" />
+                          </div>
                         </div>
                       ))}
                     </div>
