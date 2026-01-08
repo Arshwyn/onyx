@@ -8,6 +8,7 @@ export default function SettingsView({ onNavigate }) {
   const [distUnit, setDistUnit] = useState('mi'); 
   const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
   const [showTimer, setShowTimer] = useState(true); 
+  const [showConfetti, setShowConfetti] = useState(true); 
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -15,9 +16,8 @@ export default function SettingsView({ onNavigate }) {
     setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
     setDistUnit(localStorage.getItem('onyx_unit_distance') || 'mi'); 
     
-    // Load Timer Visibility
-    const timerVisible = localStorage.getItem('onyx_show_timer') !== 'false';
-    setShowTimer(timerVisible);
+    setShowTimer(localStorage.getItem('onyx_show_timer') !== 'false');
+    setShowConfetti(localStorage.getItem('onyx_show_confetti') !== 'false');
 
     const savedTimer = localStorage.getItem('onyx_timer_incs');
     if (savedTimer) setTimerIncs(JSON.parse(savedTimer));
@@ -55,6 +55,12 @@ export default function SettingsView({ onNavigate }) {
     updateUserSettings({ show_timer: visible });
   };
 
+  const handleToggleConfetti = (visible) => {
+    setShowConfetti(visible);
+    localStorage.setItem('onyx_show_confetti', visible);
+    updateUserSettings({ show_confetti: visible });
+  };
+
   const handleTimerChange = (index, value) => {
     const newIncs = [...timerIncs];
     newIncs[index] = parseInt(value) || 0;
@@ -71,7 +77,6 @@ export default function SettingsView({ onNavigate }) {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden animate-fade-in">
       
-      {/* Header */}
       <div className="mb-8 border-b border-zinc-800 pb-4">
         <h1 className="text-3xl font-black italic uppercase">Settings</h1>
         <p className="text-zinc-500 text-xs">{userEmail}</p>
@@ -84,7 +89,6 @@ export default function SettingsView({ onNavigate }) {
           onClick={() => onNavigate('routine_manager')}
           className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex justify-between items-center group hover:bg-zinc-800 transition"
         >
-          {/* Icon Removed - Text Only */}
           <div className="text-left">
             <span className="block font-bold text-gray-200">Routine Schedule</span>
             <span className="text-xs text-zinc-500">Edit your weekly workout plan</span>
@@ -93,12 +97,57 @@ export default function SettingsView({ onNavigate }) {
         </button>
       </div>
 
-      {/* 2. Units */}
+      {/* 2. Interface */}
       <div className="mb-6">
+        <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Interface</label>
+        
+        {/* Rest Timer Card (Consolidated) */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-3">
+            {/* Toggle Header */}
+            <div className="p-4 flex justify-between items-center">
+                <span className="text-sm font-bold text-gray-300">Rest Timer</span>
+                <button onClick={() => handleToggleTimer(!showTimer)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showTimer ? 'bg-blue-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showTimer ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+            </div>
+
+            {/* Quick Adds Body (Only show if enabled) */}
+            {showTimer && (
+                <div className="px-4 pb-4 pt-0 animate-fade-in">
+                    <div className="border-t border-zinc-800 pt-3 mb-2">
+                        <label className="text-[10px] text-zinc-500 font-bold uppercase block">Quick-Add Increments (Sec)</label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                        {timerIncs.map((val, idx) => (
+                            <div key={idx} className="bg-black border border-zinc-700 rounded p-2 flex flex-col items-center">
+                                <label className="text-[9px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
+                                <input 
+                                    type="number" 
+                                    value={val} 
+                                    onChange={(e) => handleTimerChange(idx, e.target.value)}
+                                    className="w-full bg-transparent text-white text-center font-bold outline-none text-sm"
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+
+        {/* Confetti Toggle */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex justify-between items-center">
+            <span className="text-sm font-bold text-gray-300">Celebrate PRs</span>
+            {/* CHANGED: Uses bg-blue-600 instead of yellow */}
+            <button onClick={() => handleToggleConfetti(!showConfetti)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showConfetti ? 'bg-blue-600' : 'bg-zinc-700'}`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showConfetti ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </button>
+        </div>
+      </div>
+
+      {/* 3. Units */}
+      <div className="mb-8">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Display Units</label>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-            
-            {/* Weight */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Weight</span>
                 <div className="flex bg-black p-1 rounded">
@@ -106,8 +155,6 @@ export default function SettingsView({ onNavigate }) {
                     <button onClick={() => handleWeightChange('kg')} className={`px-3 py-1 rounded text-xs font-bold transition ${weightUnit === 'kg' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>KG</button>
                 </div>
             </div>
-
-            {/* Measurements */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Measurements</span>
                 <div className="flex bg-black p-1 rounded">
@@ -115,8 +162,6 @@ export default function SettingsView({ onNavigate }) {
                     <button onClick={() => handleMeasureChange('cm')} className={`px-3 py-1 rounded text-xs font-bold transition ${measureUnit === 'cm' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>CM</button>
                 </div>
             </div>
-
-            {/* Distance */}
             <div className="p-4 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Distance</span>
                 <div className="flex bg-black p-1 rounded">
@@ -127,51 +172,10 @@ export default function SettingsView({ onNavigate }) {
         </div>
       </div>
 
-      {/* 3. Timer Settings */}
-      <div className="mb-8">
-        <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Rest Timer</label>
-        
-        {/* Toggle Switch */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex justify-between items-center mb-3">
-            <span className="text-sm font-bold text-gray-300">Enable Timer</span>
-            <button 
-                onClick={() => handleToggleTimer(!showTimer)}
-                className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showTimer ? 'bg-blue-600' : 'bg-zinc-700'}`}
-            >
-                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showTimer ? 'translate-x-6' : 'translate-x-0'}`}></div>
-            </button>
-        </div>
-
-        {/* Quick Adds */}
-        <div className={`transition-opacity duration-300 ${showTimer ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <label className="text-[10px] text-zinc-500 font-bold uppercase mb-2 block">Quick-Add Increments (Sec)</label>
-            <div className="grid grid-cols-3 gap-3">
-                {timerIncs.map((val, idx) => (
-                    <div key={idx} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-col items-center">
-                        <label className="text-[10px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
-                        <input 
-                            type="number" 
-                            value={val} 
-                            onChange={(e) => handleTimerChange(idx, e.target.value)}
-                            className="w-full bg-black text-white text-center font-bold p-2 rounded border border-zinc-700 focus:border-blue-500 outline-none"
-                        />
-                    </div>
-                ))}
-            </div>
-        </div>
-      </div>
-
       {/* 4. Account */}
       <div className="border-t border-zinc-800 pt-6">
-        <button 
-          onClick={handleLogout}
-          className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition"
-        >
-          Sign Out
-        </button>
-        <div className="text-center mt-4">
-            <span className="text-[10px] text-zinc-600">Onyx v1.2.0</span>
-        </div>
+        <button onClick={handleLogout} className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition">Sign Out</button>
+        <div className="text-center mt-4"><span className="text-[10px] text-zinc-600">Onyx v1.2.0</span></div>
       </div>
 
     </div>

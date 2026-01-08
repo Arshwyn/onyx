@@ -16,24 +16,18 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
-  // NEW: State to control Timer visibility
   const [showTimer, setShowTimer] = useState(true);
 
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
 
-  // Listen for storage changes to toggle timer immediately
   useEffect(() => {
     const checkTimerSetting = () => {
       const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
       setShowTimer(!isHidden);
     };
-    
-    // Check initially
     checkTimerSetting();
-
-    // Listen for updates from SettingsView
     window.addEventListener('storage', checkTimerSetting);
     return () => window.removeEventListener('storage', checkTimerSetting);
   }, []);
@@ -63,9 +57,12 @@ export default function App() {
       localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
       localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       
-      // Sync Timer Visibility
-      const timerVisible = dbSettings.show_timer !== false; // Default to true if null
+      const timerVisible = dbSettings.show_timer !== false; 
       localStorage.setItem('onyx_show_timer', timerVisible);
+
+      // NEW: Sync Confetti Setting
+      const confettiEnabled = dbSettings.show_confetti !== false; 
+      localStorage.setItem('onyx_show_confetti', confettiEnabled);
       
       window.dispatchEvent(new Event('storage'));
     } else {
@@ -74,7 +71,8 @@ export default function App() {
         measure_unit: 'in',
         distance_unit: 'mi',
         timer_increments: [30, 60, 90],
-        show_timer: true
+        show_timer: true,
+        show_confetti: true // NEW Default
       });
     }
   };
@@ -93,7 +91,6 @@ export default function App() {
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
       </div>
       
-      {/* CONDITIONAL RENDER */}
       {showTimer && <RestTimer />}
 
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
