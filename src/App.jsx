@@ -60,9 +60,14 @@ export default function App() {
       const timerVisible = dbSettings.show_timer !== false; 
       localStorage.setItem('onyx_show_timer', timerVisible);
 
-      // NEW: Sync Confetti Setting
       const confettiEnabled = dbSettings.show_confetti !== false; 
       localStorage.setItem('onyx_show_confetti', confettiEnabled);
+
+      // NEW: Sync Dashboard Visibility Settings
+      const showBW = dbSettings.show_body_weight !== false;
+      const showMeas = dbSettings.show_measurements !== false;
+      localStorage.setItem('onyx_show_bw', showBW);
+      localStorage.setItem('onyx_show_meas', showMeas);
       
       window.dispatchEvent(new Event('storage'));
     } else {
@@ -72,7 +77,9 @@ export default function App() {
         distance_unit: 'mi',
         timer_increments: [30, 60, 90],
         show_timer: true,
-        show_confetti: true // NEW Default
+        show_confetti: true,
+        show_body_weight: true, // Default True
+        show_measurements: true // Default True
       });
     }
   };

@@ -9,6 +9,11 @@ export default function SettingsView({ onNavigate }) {
   const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
   const [showTimer, setShowTimer] = useState(true); 
   const [showConfetti, setShowConfetti] = useState(true); 
+  
+  // NEW STATES
+  const [showBW, setShowBW] = useState(true);
+  const [showMeas, setShowMeas] = useState(true);
+
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -18,6 +23,10 @@ export default function SettingsView({ onNavigate }) {
     
     setShowTimer(localStorage.getItem('onyx_show_timer') !== 'false');
     setShowConfetti(localStorage.getItem('onyx_show_confetti') !== 'false');
+    
+    // Load new settings
+    setShowBW(localStorage.getItem('onyx_show_bw') !== 'false');
+    setShowMeas(localStorage.getItem('onyx_show_meas') !== 'false');
 
     const savedTimer = localStorage.getItem('onyx_timer_incs');
     if (savedTimer) setTimerIncs(JSON.parse(savedTimer));
@@ -61,11 +70,22 @@ export default function SettingsView({ onNavigate }) {
     updateUserSettings({ show_confetti: visible });
   };
 
+  // NEW HANDLERS
+  const handleToggleBW = (visible) => {
+    setShowBW(visible);
+    localStorage.setItem('onyx_show_bw', visible);
+    updateUserSettings({ show_body_weight: visible });
+  };
+
+  const handleToggleMeas = (visible) => {
+    setShowMeas(visible);
+    localStorage.setItem('onyx_show_meas', visible);
+    updateUserSettings({ show_measurements: visible });
+  };
+
   const handleTimerChange = (index, value) => {
     const newIncs = [...timerIncs];
-    // This handles the logic: empty string becomes 0 in state, 
-    // but the input view logic below hides that 0.
-    newIncs[index] = parseInt(value) || 0; 
+    newIncs[index] = parseInt(value) || 0;
     setTimerIncs(newIncs);
     localStorage.setItem('onyx_timer_incs', JSON.stringify(newIncs));
     window.dispatchEvent(new Event('storage'));
@@ -103,17 +123,30 @@ export default function SettingsView({ onNavigate }) {
       <div className="mb-6">
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Interface</label>
         
+        {/* Daily View Toggles */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-3">
+            <div className="p-4 flex justify-between items-center border-b border-zinc-800">
+                <span className="text-sm font-bold text-gray-300">Show Body Weight</span>
+                <button onClick={() => handleToggleBW(!showBW)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showBW ? 'bg-blue-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showBW ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+            </div>
+            <div className="p-4 flex justify-between items-center">
+                <span className="text-sm font-bold text-gray-300">Show Measurements</span>
+                <button onClick={() => handleToggleMeas(!showMeas)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showMeas ? 'bg-blue-600' : 'bg-zinc-700'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showMeas ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+            </div>
+        </div>
+
         {/* Rest Timer Card */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-3">
-            {/* Toggle Header */}
             <div className="p-4 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Rest Timer</span>
                 <button onClick={() => handleToggleTimer(!showTimer)} className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showTimer ? 'bg-blue-600' : 'bg-zinc-700'}`}>
                     <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showTimer ? 'translate-x-6' : 'translate-x-0'}`}></div>
                 </button>
             </div>
-
-            {/* Quick Adds Body (Only show if enabled) */}
             {showTimer && (
                 <div className="px-4 pb-4 pt-0 animate-fade-in">
                     <div className="border-t border-zinc-800 pt-3 mb-2">
@@ -123,14 +156,7 @@ export default function SettingsView({ onNavigate }) {
                         {timerIncs.map((val, idx) => (
                             <div key={idx} className="bg-black border border-zinc-700 rounded p-2 flex flex-col items-center">
                                 <label className="text-[9px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
-                                <input 
-                                    type="number" 
-                                    // FIXED: If value is 0, show empty string
-                                    value={val === 0 ? '' : val} 
-                                    onChange={(e) => handleTimerChange(idx, e.target.value)}
-                                    className="w-full bg-transparent text-white text-center font-bold outline-none text-sm"
-                                    placeholder="0"
-                                />
+                                <input type="number" value={val === 0 ? '' : val} onChange={(e) => handleTimerChange(idx, e.target.value)} className="w-full bg-transparent text-white text-center font-bold outline-none text-sm" placeholder="0" />
                             </div>
                         ))}
                     </div>
@@ -177,15 +203,8 @@ export default function SettingsView({ onNavigate }) {
 
       {/* 4. Account */}
       <div className="border-t border-zinc-800 pt-6">
-        <button 
-          onClick={handleLogout}
-          className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition"
-        >
-          Sign Out
-        </button>
-        <div className="text-center mt-4">
-            <span className="text-[10px] text-zinc-600">Onyx v1.2.0</span>
-        </div>
+        <button onClick={handleLogout} className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition">Sign Out</button>
+        <div className="text-center mt-4"><span className="text-[10px] text-zinc-600">Onyx v1.2.0</span></div>
       </div>
 
     </div>
