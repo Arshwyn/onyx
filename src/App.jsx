@@ -14,14 +14,29 @@ import RestTimer from './components/RestTimer';
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
-  const [view, setView] = useState(() => {
-    return localStorage.getItem('onyx_view') || 'daily';
-  });
+  // NEW: State to control Timer visibility
+  const [showTimer, setShowTimer] = useState(true);
 
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
+
+  // Listen for storage changes to toggle timer immediately
+  useEffect(() => {
+    const checkTimerSetting = () => {
+      const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
+      setShowTimer(!isHidden);
+    };
+    
+    // Check initially
+    checkTimerSetting();
+
+    // Listen for updates from SettingsView
+    window.addEventListener('storage', checkTimerSetting);
+    return () => window.removeEventListener('storage', checkTimerSetting);
+  }, []);
 
   useEffect(() => {
     const initSession = async () => {
@@ -45,18 +60,21 @@ export default function App() {
     if (dbSettings) {
       localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
       localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
-      
-      // NEW: Sync Distance Unit
       localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
-      
       localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
+      
+      // NEW: Sync Timer Visibility
+      const timerVisible = dbSettings.show_timer !== false; // Default to true if null
+      localStorage.setItem('onyx_show_timer', timerVisible);
+      
       window.dispatchEvent(new Event('storage'));
     } else {
       await updateUserSettings({
         weight_unit: 'lbs',
         measure_unit: 'in',
-        distance_unit: 'mi', // NEW: Default
-        timer_increments: [30, 60, 90]
+        distance_unit: 'mi',
+        timer_increments: [30, 60, 90],
+        show_timer: true // NEW Default
       });
     }
   };
@@ -74,7 +92,10 @@ export default function App() {
         {view === 'settings' && <SettingsView onNavigate={setView} />}
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
       </div>
-      <RestTimer />
+      
+      {/* CONDITIONAL RENDER */}
+      {showTimer && <RestTimer />}
+
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
         <div className="max-w-md mx-auto flex justify-between px-6 py-4">
           <NavButton active={view === 'daily'} onClick={() => setView('daily')} icon="calendar" label="Today" />

@@ -7,6 +7,7 @@ export default function SettingsView({ onNavigate }) {
   const [measureUnit, setMeasureUnit] = useState('in');
   const [distUnit, setDistUnit] = useState('mi'); 
   const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
+  const [showTimer, setShowTimer] = useState(true); // NEW
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -14,6 +15,10 @@ export default function SettingsView({ onNavigate }) {
     setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
     setDistUnit(localStorage.getItem('onyx_unit_distance') || 'mi'); 
     
+    // Load Timer Visibility
+    const timerVisible = localStorage.getItem('onyx_show_timer') !== 'false';
+    setShowTimer(timerVisible);
+
     const savedTimer = localStorage.getItem('onyx_timer_incs');
     if (savedTimer) setTimerIncs(JSON.parse(savedTimer));
 
@@ -41,6 +46,14 @@ export default function SettingsView({ onNavigate }) {
     localStorage.setItem('onyx_unit_distance', unit);
     window.dispatchEvent(new Event('storage'));
     updateUserSettings({ distance_unit: unit });
+  };
+
+  // NEW: Toggle Logic
+  const handleToggleTimer = (visible) => {
+    setShowTimer(visible);
+    localStorage.setItem('onyx_show_timer', visible);
+    window.dispatchEvent(new Event('storage'));
+    updateUserSettings({ show_timer: visible });
   };
 
   const handleTimerChange = (index, value) => {
@@ -72,7 +85,6 @@ export default function SettingsView({ onNavigate }) {
           onClick={() => onNavigate('routine_manager')}
           className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex justify-between items-center group hover:bg-zinc-800 transition"
         >
-          {/* Icon Removed - Text Only */}
           <div className="text-left">
             <span className="block font-bold text-gray-200">Routine Schedule</span>
             <span className="text-xs text-zinc-500">Edit your weekly workout plan</span>
@@ -86,7 +98,6 @@ export default function SettingsView({ onNavigate }) {
         <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Display Units</label>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
             
-            {/* Weight */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Weight</span>
                 <div className="flex bg-black p-1 rounded">
@@ -95,7 +106,6 @@ export default function SettingsView({ onNavigate }) {
                 </div>
             </div>
 
-            {/* Measurements */}
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Measurements</span>
                 <div className="flex bg-black p-1 rounded">
@@ -104,7 +114,6 @@ export default function SettingsView({ onNavigate }) {
                 </div>
             </div>
 
-            {/* Distance */}
             <div className="p-4 flex justify-between items-center">
                 <span className="text-sm font-bold text-gray-300">Distance</span>
                 <div className="flex bg-black p-1 rounded">
@@ -115,21 +124,37 @@ export default function SettingsView({ onNavigate }) {
         </div>
       </div>
 
-      {/* 3. Timer Defaults */}
+      {/* 3. Timer Settings (New Section) */}
       <div className="mb-8">
-        <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Timer Quick-Adds (Seconds)</label>
-        <div className="grid grid-cols-3 gap-3">
-            {timerIncs.map((val, idx) => (
-                <div key={idx} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-col items-center">
-                    <label className="text-[10px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
-                    <input 
-                        type="number" 
-                        value={val} 
-                        onChange={(e) => handleTimerChange(idx, e.target.value)}
-                        className="w-full bg-black text-white text-center font-bold p-2 rounded border border-zinc-700 focus:border-blue-500 outline-none"
-                    />
-                </div>
-            ))}
+        <label className="text-xs text-zinc-500 font-bold uppercase mb-2 block">Rest Timer</label>
+        
+        {/* Toggle Switch */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex justify-between items-center mb-3">
+            <span className="text-sm font-bold text-gray-300">Enable Timer</span>
+            <button 
+                onClick={() => handleToggleTimer(!showTimer)}
+                className={`w-12 h-6 rounded-full p-1 transition duration-300 ease-in-out ${showTimer ? 'bg-blue-600' : 'bg-zinc-700'}`}
+            >
+                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition duration-300 ease-in-out ${showTimer ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </button>
+        </div>
+
+        {/* Quick Adds (Only show if enabled) */}
+        <div className={`transition-opacity duration-300 ${showTimer ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+            <label className="text-[10px] text-zinc-500 font-bold uppercase mb-2 block">Quick-Add Increments (Sec)</label>
+            <div className="grid grid-cols-3 gap-3">
+                {timerIncs.map((val, idx) => (
+                    <div key={idx} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex flex-col items-center">
+                        <label className="text-[10px] text-zinc-500 font-bold mb-1">Button {idx + 1}</label>
+                        <input 
+                            type="number" 
+                            value={val} 
+                            onChange={(e) => handleTimerChange(idx, e.target.value)}
+                            className="w-full bg-black text-white text-center font-bold p-2 rounded border border-zinc-700 focus:border-blue-500 outline-none"
+                        />
+                    </div>
+                ))}
+            </div>
         </div>
       </div>
 
