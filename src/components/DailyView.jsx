@@ -370,9 +370,13 @@ export default function DailyView() {
     }
   };
 
-  // --- RENDER ---
+  // --- RENDER HELPERS ---
   const viewDateStr = getDateStr(viewDate);
   const isToday = viewDateStr === todayDateStr;
+  
+  // FIXED: Added missing dayName definition here
+  const dayName = DAYS[viewDate.getDay()]; 
+  
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;
@@ -384,10 +388,11 @@ export default function DailyView() {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
+      {/* GLOBAL MODALS */}
       <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
       <PlateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} initialWeight={calcInitWeight} unit={weightUnit} />
 
-      {/* HEADER */}
+      {/* 1. NAVIGATION HEADER */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         <div className="flex justify-between items-center mb-4 px-1">
             <button onClick={() => changeDay(-1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
@@ -400,7 +405,7 @@ export default function DailyView() {
         </div>
       </div>
 
-      {/* BODY STATS (CONDITIONAL) */}
+      {/* 2. BODY STATS */}
       <div className="mb-4 space-y-2">
         
         {/* WEIGHT BOX */}
