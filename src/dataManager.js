@@ -241,3 +241,44 @@ export const updateUserSettings = async (settings) => {
 
     if (error) console.error('Error updating settings:', error);
 };
+
+// 1. FIXED: Changed 'logs' to 'workout_logs'
+export const getLogsByDate = async (dateStr) => {
+  const { data, error } = await supabase
+    .from('workout_logs') // <--- FIXED HERE
+    .select('*')
+    .eq('date', dateStr);
+  if (error) throw error;
+  return data;
+};
+
+// 2. Cardio is usually 'cardio_logs', which the error said was found.
+export const getCardioLogsByDate = async (dateStr) => {
+  const { data, error } = await supabase
+    .from('cardio_logs')
+    .select('*')
+    .eq('date', dateStr);
+  if (error) throw error;
+  return data;
+};
+
+// 3. FIXED: Changed 'logs' to 'workout_logs'
+export const getRecentLogs = async (limit = 50) => {
+  const { data, error } = await supabase
+    .from('workout_logs') // <--- FIXED HERE
+    .select('*')
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data;
+};
+
+export const getRecentCardioLogs = async (limit = 50) => {
+  const { data, error } = await supabase
+    .from('cardio_logs')
+    .select('*')
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data;
+};
