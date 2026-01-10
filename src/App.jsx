@@ -150,23 +150,18 @@ export default function App() {
 
         {/* VIEW LOGIC: Only show loader for specific views that rely on fresh data */}
 
-        {view === 'daily' && (
-          isResuming ? <ReconnectLoader /> : <DailyView key={`daily-${refreshKey}`} />
-        )}
+        {view === 'daily' && <DailyView />}
 
         {view === 'history' && (
           isResuming ? <ReconnectLoader /> : <HistoryView key={`history-${refreshKey}`} />
         )}
 
-        {view === 'trends' && (
-          isResuming ? <ReconnectLoader /> : <TrendsView key={`trends-${refreshKey}`} />
-        )}
+        {view === 'trends' && <TrendsView />}
 
-        {/* IMPORTANT: Logger is NEVER unmounted during resume, so typed data is saved. */}
         {view === 'log' && <WorkoutLogger />}
 
-        {/* Settings doesn't need a hard reload either */}
         {view === 'settings' && <SettingsView onNavigate={setView} />}
+        
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />}
 
       </div>
