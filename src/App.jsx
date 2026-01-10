@@ -18,7 +18,7 @@ export default function App() {
   
   const [showTimer, setShowTimer] = useState(true);
   
-  // New State: explicitly tracks if we are in the middle of a "Resume" action
+  // Explicit "Resuming" state to control the global loader
   const [isResuming, setIsResuming] = useState(false);
   const [refreshKey, setRefreshKey] = useState(Date.now());
 
@@ -43,13 +43,14 @@ export default function App() {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      if (session) await syncSettings();
+      if (session) await syncSettings(); // Initial load can wait
     };
     initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session) await syncSettings();
+      // On auth change, we can sync settings safely
+      if (session) syncSettings(); 
     });
 
     // --- RESUME / RE-SYNC LOGIC ---
@@ -61,7 +62,7 @@ export default function App() {
 
         if (currentSession) {
             // A. ENTER RESUME MODE
-            // This unmounts DailyView/HistoryView immediately, stopping any pending stale requests
+            // Unmounts views immediately to stop stale requests
             setIsResuming(true);
 
             // TIMEOUT HELPER
@@ -70,27 +71,33 @@ export default function App() {
                 new Promise(resolve => setTimeout(() => resolve('timeout'), ms))
             ]);
 
-            // B. CLEANUP & HANDSHAKE
+            // B. CLEANUP & AGGRESSIVE HANDSHAKE
+            // 1. Kill stale channels
             await safeAwait(supabase.removeAllChannels());
-            console.log("Channels cleared. Refreshing Auth...");
-            await safeAwait(supabase.auth.getUser());
             
-            // C. SYNC & WAIT
-            // We force a 500ms delay to let the socket reconnect fully before mounting views
-            console.log("Handshake done. Waiting for socket stability...");
+            console.log("Channels cleared. Forcing network refresh...");
+            
+            // 2. Force Token Refresh (Better than getUser for waking up radio)
+            // This forces a POST request which mobile networks prioritize over GET
+            await safeAwait(supabase.auth.refreshSession());
+            
+            // C. WAIT FOR SOCKET STABILITY
+            console.log("Network refreshed. Waiting for socket...");
             await new Promise(r => setTimeout(r, 500));
 
             // D. RESTORE UI
             setSession(currentSession);
-            setRefreshKey(Date.now());
-            await syncSettings();
+            setRefreshKey(Date.now()); // Forces fresh mount of DailyView
+            
+            // E. NON-BLOCKING SETTINGS SYNC
+            // Critical Fix: Do NOT await this. If it hangs, the UI still loads.
+            console.log("Restoring UI now (syncing settings in background)...");
+            syncSettings(); 
             
             const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
             setShowTimer(!isHidden);
             
-            // Turn off resume mode -> Mounts components -> Triggers data fetch
             setIsResuming(false);
-            console.log("UI Restored.");
         }
       }
     };
@@ -106,37 +113,42 @@ export default function App() {
   }, []);
 
   const syncSettings = async () => {
-    const dbSettings = await getUserSettings();
-    
-    if (dbSettings) {
-      localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
-      localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
-      localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
-      localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
-      
-      const timerVisible = dbSettings.show_timer !== false; 
-      localStorage.setItem('onyx_show_timer', timerVisible);
+    // This is now "fire and forget" during resume
+    try {
+        const dbSettings = await getUserSettings();
+        if (dbSettings) {
+          localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
+          localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
+          localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
+          localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
+          
+          const timerVisible = dbSettings.show_timer !== false; 
+          localStorage.setItem('onyx_show_timer', timerVisible);
 
-      const confettiEnabled = dbSettings.show_confetti !== false; 
-      localStorage.setItem('onyx_show_confetti', confettiEnabled);
+          const confettiEnabled = dbSettings.show_confetti !== false; 
+          localStorage.setItem('onyx_show_confetti', confettiEnabled);
 
-      const showBW = dbSettings.show_body_weight !== false;
-      const showMeas = dbSettings.show_measurements !== false;
-      localStorage.setItem('onyx_show_bw', showBW);
-      localStorage.setItem('onyx_show_meas', showMeas);
-      
-      window.dispatchEvent(new Event('storage'));
-    } else {
-      await updateUserSettings({
-        weight_unit: 'lbs',
-        measure_unit: 'in',
-        distance_unit: 'mi',
-        timer_increments: [30, 60, 90],
-        show_timer: true,
-        show_confetti: true,
-        show_body_weight: true,
-        show_measurements: true
-      });
+          const showBW = dbSettings.show_body_weight !== false;
+          const showMeas = dbSettings.show_measurements !== false;
+          localStorage.setItem('onyx_show_bw', showBW);
+          localStorage.setItem('onyx_show_meas', showMeas);
+          
+          window.dispatchEvent(new Event('storage'));
+        } else {
+          // Defaults
+          await updateUserSettings({
+            weight_unit: 'lbs',
+            measure_unit: 'in',
+            distance_unit: 'mi',
+            timer_increments: [30, 60, 90],
+            show_timer: true,
+            show_confetti: true,
+            show_body_weight: true,
+            show_measurements: true
+          });
+        }
+    } catch (e) {
+        console.warn("Background settings sync failed (connection might be recovering)", e);
     }
   };
 
@@ -146,21 +158,20 @@ export default function App() {
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
         
-        {/* GLOBAL LOADER DURING RESUME */}
-        {/* This prevents the views from mounting/fetching until the connection is definitely ready */}
+        {/* GLOBAL RECONNECTING LOADER */}
         {isResuming ? (
             <div className="flex flex-col items-center justify-center pt-32 animate-pulse">
                 <div className="text-zinc-500 text-sm font-mono mb-2">Reconnecting...</div>
             </div>
         ) : (
             <>
+                {/* KEYED VIEWS: Force Remount on Resume */}
                 {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
                 {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
                 {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
                 
-                {/* Logger keeps its state unless we are hard-resetting everything */}
+                {/* NON-KEYED VIEWS: Preserve Input State */}
                 {view === 'log' && <WorkoutLogger />}
-                
                 {view === 'settings' && <SettingsView onNavigate={setView} />}
                 {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
             </>
