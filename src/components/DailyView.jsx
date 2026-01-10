@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   getRoutines, getExercises, addLog, updateLog, getLogs, 
@@ -62,9 +62,6 @@ export default function DailyView() {
   const [isAdHocRest, setIsAdHocRest] = useState(false);
   const [isSwapped, setIsSwapped] = useState(false); 
 
-  // Refs for "freshness" check
-  const viewDateRef = useRef(viewDate); // Keep ref to current view date for listener
-
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
   const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -74,6 +71,7 @@ export default function DailyView() {
     const dateStr = now.toISOString().split('T')[0];
     setTodayDateStr(dateStr);
     
+    // Standard Load (App.jsx will force remount if resumed)
     loadDailyView(now);
 
     const loadSettings = () => {
@@ -88,43 +86,8 @@ export default function DailyView() {
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
-    
-    // --- RESYNC ON FOCUS / VISIBILITY CHANGE ---
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const currentNow = new Date();
-        const currentNowStr = currentNow.toISOString().split('T')[0];
-        
-        // 1. Check if day rolled over
-        if (currentNowStr !== todayDateStr) {
-           setTodayDateStr(currentNowStr);
-           // If user was viewing "Today", jump to the new Today
-           if (getDateStr(viewDateRef.current) === todayDateStr) {
-             setViewDate(currentNow);
-             loadDailyView(currentNow, false); // Silent reload
-             return;
-           }
-        }
-        
-        // 2. Always refresh data for the currently viewed date (Silent Sync)
-        loadDailyView(viewDateRef.current, false);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange); // Extra safety for some browsers
-
-    return () => {
-        window.removeEventListener('storage', loadSettings);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('focus', handleVisibilityChange);
-    };
-  }, []); // Run once on mount
-
-  // Keep ref updated whenever viewDate changes
-  useEffect(() => {
-    viewDateRef.current = viewDate;
-  }, [viewDate]);
+    return () => window.removeEventListener('storage', loadSettings);
+  }, []);
 
   useEffect(() => {
     loadHistoryStats();
@@ -192,7 +155,6 @@ export default function DailyView() {
 
             setExercises(mergedData);
 
-            // Re-hydrate inputs only if they are empty (don't overwrite user typing)
             setSetInputs(prev => {
                 const newInputs = { ...prev };
                 mergedData.forEach(ex => {
@@ -203,9 +165,6 @@ export default function DailyView() {
                             newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
                         }
                     } else if (ex.existingLog) {
-                        // If log updated in background, sync it
-                        // NOTE: This might overwrite typing if sync happens while typing. 
-                        // But since this only runs on "Resume", the keyboard is likely closed.
                         newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
                     }
                 });
