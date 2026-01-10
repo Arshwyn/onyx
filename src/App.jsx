@@ -62,7 +62,6 @@ export default function App() {
 
         if (currentSession) {
             // A. ENTER RESUME MODE
-            // Unmounts views immediately to stop stale requests
             setIsResuming(true);
 
             // TIMEOUT HELPER
@@ -72,13 +71,8 @@ export default function App() {
             ]);
 
             // B. CLEANUP & AGGRESSIVE HANDSHAKE
-            // 1. Kill stale channels
             await safeAwait(supabase.removeAllChannels());
-            
             console.log("Channels cleared. Forcing network refresh...");
-            
-            // 2. Force Token Refresh (Better than getUser for waking up radio)
-            // This forces a POST request which mobile networks prioritize over GET
             await safeAwait(supabase.auth.refreshSession());
             
             // C. WAIT FOR SOCKET STABILITY
@@ -89,8 +83,6 @@ export default function App() {
             setSession(currentSession);
             setRefreshKey(Date.now()); // Forces fresh mount of DailyView
             
-            // E. NON-BLOCKING SETTINGS SYNC
-            // Critical Fix: Do NOT await this. If it hangs, the UI still loads.
             console.log("Restoring UI now (syncing settings in background)...");
             syncSettings(); 
             
@@ -113,7 +105,6 @@ export default function App() {
   }, []);
 
   const syncSettings = async () => {
-    // This is now "fire and forget" during resume
     try {
         const dbSettings = await getUserSettings();
         if (dbSettings) {
@@ -135,7 +126,6 @@ export default function App() {
           
           window.dispatchEvent(new Event('storage'));
         } else {
-          // Defaults
           await updateUserSettings({
             weight_unit: 'lbs',
             measure_unit: 'in',
@@ -158,24 +148,26 @@ export default function App() {
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
         
-        {/* GLOBAL RECONNECTING LOADER */}
-        {isResuming ? (
-            <div className="flex flex-col items-center justify-center pt-32 animate-pulse">
-                <div className="text-zinc-500 text-sm font-mono mb-2">Reconnecting...</div>
-            </div>
-        ) : (
-            <>
-                {/* KEYED VIEWS: Force Remount on Resume */}
-                {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
-                {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
-                {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
-                
-                {/* NON-KEYED VIEWS: Preserve Input State */}
-                {view === 'log' && <WorkoutLogger />}
-                {view === 'settings' && <SettingsView onNavigate={setView} />}
-                {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
-            </>
+        {/* VIEW LOGIC: Only show loader for specific views that rely on fresh data */}
+        
+        {view === 'daily' && (
+            isResuming ? <ReconnectLoader /> : <DailyView key={`daily-${refreshKey}`} />
         )}
+
+        {view === 'history' && (
+            isResuming ? <ReconnectLoader /> : <HistoryView key={`history-${refreshKey}`} />
+        )}
+
+        {view === 'trends' && (
+            isResuming ? <ReconnectLoader /> : <TrendsView key={`trends-${refreshKey}`} />
+        )}
+        
+        {/* IMPORTANT: Logger is NEVER unmounted during resume, so typed data is saved. */}
+        {view === 'log' && <WorkoutLogger />}
+        
+        {/* Settings doesn't need a hard reload either */}
+        {view === 'settings' && <SettingsView onNavigate={setView} />}
+        {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
 
       </div>
       
@@ -192,6 +184,15 @@ export default function App() {
       </nav>
     </div>
   );
+}
+
+// Simple internal component for the loading state
+function ReconnectLoader() {
+    return (
+        <div className="flex flex-col items-center justify-center pt-32 animate-pulse">
+            <div className="text-zinc-500 text-sm font-mono mb-2">Reconnecting...</div>
+        </div>
+    );
 }
 
 function NavButton({ active, onClick, icon, label }) {
