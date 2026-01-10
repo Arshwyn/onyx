@@ -58,42 +58,46 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         console.log("App resumed. Checking connection...");
 
-        // Check if we have a current session in state
         const { data: { session: currentSession } } = await supabase.auth.getSession();
 
         if (currentSession) {
             console.log("Session exists. Force unsubscribing channels...");
             
-            // 1. FORCE UNSUBSCRIBE
-            // This kills any zombie WebSockets or Realtime connections that hung while backgrounded
-            await supabase.removeAllChannels();
+            // TIMEOUT HELPER: Prevents hanging forever on zombie connections
+            const safeAwait = (promise, ms = 2000) => Promise.race([
+                promise,
+                new Promise(resolve => setTimeout(() => resolve('timeout'), ms))
+            ]);
 
-            // 2. REFRESH AUTH
-            // Force a handshake with the server to ensure the socket is alive
-            const { error } = await supabase.auth.getUser();
+            // 1. FORCE UNSUBSCRIBE (With Timeout)
+            // Even if this hangs, we move on after 2 seconds
+            await safeAwait(supabase.removeAllChannels());
+
+            console.log("Channels cleared (or timed out). Refreshing Auth...");
+
+            // 2. REFRESH AUTH (With Timeout)
+            // Force a handshake. If it hangs, we assume connection is dead but will try to reload UI anyway.
+            await safeAwait(supabase.auth.getUser());
             
-            if (!error) {
-                console.log("Connection healthy. Resubscribing/Reloading views...");
-                setSession(currentSession); // Ensure state is fresh
-                
-                // 3. RESUBSCRIBE (Force Remount)
-                // Updating this key destroys the Daily/History components and mounts them fresh,
-                // triggering their useEffects to fetch new data on a clean connection.
-                setRefreshKey(Date.now());
-                
-                // Re-sync local settings
-                await syncSettings();
-                const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
-                setShowTimer(!isHidden);
-            } else {
-                console.log("Session invalid on resume", error);
-            }
+            console.log("Handshake complete. Reloading views...");
+            
+            setSession(currentSession); // Ensure state is fresh
+            
+            // 3. RESUBSCRIBE (Force Remount)
+            // This is the most important part: it kills the old view and starts a fresh one.
+            setRefreshKey(Date.now());
+            
+            // Re-sync local settings (non-blocking)
+            syncSettings();
+            
+            const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
+            setShowTimer(!isHidden);
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange); // Fallback for some browsers
+    window.addEventListener('focus', handleVisibilityChange); 
 
     return () => {
         subscription.unsubscribe();
