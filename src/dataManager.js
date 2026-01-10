@@ -1,15 +1,5 @@
 import { supabase } from './supabaseClient';
 
-// --- UTILITY: TIMEOUT WRAPPER ---
-// Forces any DB request to fail if it takes longer than 6 seconds
-// This prevents the "hanging" UI when the connection is a zombie
-const withTimeout = (promise, ms = 6000) => {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), ms))
-    ]);
-};
-
 // --- HELPER: Get Current User ---
 const getUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -36,10 +26,13 @@ const DEFAULT_EXERCISES = [
 ];
 
 export const getExercises = async () => {
+    // Fetch custom exercises from DB
     const { data, error } = await supabase.from('custom_exercises').select('*');
     if (error) console.error(error);
 
     const custom = data || [];
+    // Merge defaults with custom ones
+    // We map DB IDs to strings to ensure compatibility
     const formattedCustom = custom.map(e => ({ ...e, id: String(e.id) }));
 
     return [...DEFAULT_EXERCISES, ...formattedCustom];
@@ -58,7 +51,9 @@ export const addExercise = async (name, category) => {
 };
 
 export const deleteCustomExercise = async (id) => {
+    // Only allow deleting if it's NOT a default exercise (defaults start with 'ex_')
     if (String(id).startsWith('ex_')) return;
+
     const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
     if (error) console.error(error);
 };
@@ -227,18 +222,19 @@ export const getUserSettings = async () => {
         .eq('user_id', user.id)
         .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "Row not found"
         console.error('Error fetching settings:', error);
         return null;
     }
 
-    return data;
+    return data; // Returns null if no settings row exists yet
 };
 
 export const updateUserSettings = async (settings) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // settings object should look like: { weight_unit: 'kg', measure_unit: 'cm', timer_increments: [30,60,90] }
     const { error } = await supabase
         .from('user_settings')
         .upsert({ user_id: user.id, ...settings });
@@ -246,19 +242,17 @@ export const updateUserSettings = async (settings) => {
     if (error) console.error('Error updating settings:', error);
 };
 
-// --- PERFORMANCE OPTIMIZATIONS (FIXED TABLE NAMES) ---
-
-// 1. Fetch logs ONLY for a specific date
+// 1. FIXED: Changed 'logs' to 'workout_logs'
 export const getLogsByDate = async (dateStr) => {
   const { data, error } = await supabase
-    .from('workout_logs') // Fixed: was 'logs'
+    .from('workout_logs') // <--- FIXED HERE
     .select('*')
     .eq('date', dateStr);
   if (error) throw error;
   return data;
 };
 
-// 2. Fetch cardio ONLY for a specific date
+// 2. Cardio is usually 'cardio_logs', which the error said was found.
 export const getCardioLogsByDate = async (dateStr) => {
   const { data, error } = await supabase
     .from('cardio_logs')
@@ -268,10 +262,10 @@ export const getCardioLogsByDate = async (dateStr) => {
   return data;
 };
 
-// 3. Fetch History with a Limit (Pagination)
+// 3. FIXED: Changed 'logs' to 'workout_logs'
 export const getRecentLogs = async (limit = 50) => {
   const { data, error } = await supabase
-    .from('workout_logs') // Fixed: was 'logs'
+    .from('workout_logs') // <--- FIXED HERE
     .select('*')
     .order('date', { ascending: false })
     .limit(limit);

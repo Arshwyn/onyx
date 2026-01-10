@@ -17,6 +17,8 @@ export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
   const [showTimer, setShowTimer] = useState(true);
+  
+  // Refresh Key state to force re-renders on resume
   const [refreshKey, setRefreshKey] = useState(Date.now());
 
   useEffect(() => {
@@ -46,22 +48,19 @@ export default function App() {
       if (session) await syncSettings();
     });
 
-    // --- RESUME LISTENER (FIXED) ---
+    // --- RESUME LISTENER (Global Fix) ---
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        console.log("App resumed");
+        console.log("App resumed - Waking up connection...");
         
-        // 1. IMMEDIATE UI RESET: Don't await anything here! 
-        // This forces the Daily/History views to remount and start fresh requests immediately.
+        // 1. Force Daily/History/Trends to remount and fetch fresh data
         setRefreshKey(Date.now());
 
-        // 2. Wake up session in background (don't block the UI update)
-        supabase.auth.getSession().then(({ data }) => {
-            if (data.session) {
-                setSession(data.session);
-                syncSettings();
-            }
-        });
+        // 2. Wake up Auth Session (Fixes 'hanging' Logger requests)
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session); 
+        
+        if (session) await syncSettings();
         
         const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
         setShowTimer(!isHidden);
@@ -118,10 +117,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
+        {/* KEY PROP: Forces remount on resume */}
         {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
         {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
         {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
         
+        {/* No key on Logger/Settings to preserve text input */}
         {view === 'log' && <WorkoutLogger />}
         {view === 'settings' && <SettingsView onNavigate={setView} />}
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
