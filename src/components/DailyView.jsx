@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   getRoutines, getExercises, addLog, updateLog, getLogs, 
-  getLogsByDate, getCardioLogsByDate, 
+  getLogsByDate, getCardioLogsByDate, // NEW IMPORTS
   getBodyWeights, addBodyWeight,              
   getCardioLogs, addCardioLog, deleteCardioLog, 
   getCircumferences, addCircumference, deleteCircumference 
@@ -35,11 +35,11 @@ export default function DailyView() {
   
   // Inputs & Logs
   const [setInputs, setSetInputs] = useState({});
-  const [dailyLogs, setDailyLogs] = useState([]); 
+  const [dailyLogs, setDailyLogs] = useState([]); // Only holds TODAY'S logs
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   
-  // Stats
+  // Stats (Fetched in Background)
   const [lastPerformances, setLastPerformances] = useState({});
   const [personalRecords, setPersonalRecords] = useState({}); 
 
@@ -62,9 +62,6 @@ export default function DailyView() {
   const [isAdHocRest, setIsAdHocRest] = useState(false);
   const [isSwapped, setIsSwapped] = useState(false); 
 
-  // Refs for "freshness" check
-  const viewDateRef = useRef(viewDate); // Keep ref to current view date for listener
-
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
   const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -74,6 +71,7 @@ export default function DailyView() {
     const dateStr = now.toISOString().split('T')[0];
     setTodayDateStr(dateStr);
     
+    // 1. FAST LOAD: Load only today's data to unblock UI
     loadDailyView(now);
 
     const loadSettings = () => {
@@ -88,53 +86,19 @@ export default function DailyView() {
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
-    
-    // --- RESYNC ON FOCUS / VISIBILITY CHANGE ---
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const currentNow = new Date();
-        const currentNowStr = currentNow.toISOString().split('T')[0];
-        
-        // 1. Check if day rolled over
-        if (currentNowStr !== todayDateStr) {
-           setTodayDateStr(currentNowStr);
-           // If user was viewing "Today", jump to the new Today
-           if (getDateStr(viewDateRef.current) === todayDateStr) {
-             setViewDate(currentNow);
-             loadDailyView(currentNow, false); // Silent reload
-             return;
-           }
-        }
-        
-        // 2. Always refresh data for the currently viewed date (Silent Sync)
-        loadDailyView(viewDateRef.current, false);
-      }
-    };
+    return () => window.removeEventListener('storage', loadSettings);
+  }, []);
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange); // Extra safety for some browsers
-
-    return () => {
-        window.removeEventListener('storage', loadSettings);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('focus', handleVisibilityChange);
-    };
-  }, []); // Run once on mount
-
-  // Keep ref updated whenever viewDate changes
-  useEffect(() => {
-    viewDateRef.current = viewDate;
-  }, [viewDate]);
-
+  // 2. BACKGROUND LOAD: Fetch full history for PRs/Stats after initial render
   useEffect(() => {
     loadHistoryStats();
-  }, [exercises]);
+  }, [exercises]); // Re-run when exercises change (e.g. routine swap)
 
   const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
   const openConfirm = (title, message, onConfirm, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal) => { setCalcInitWeight(weightVal); setShowCalc(true); };
 
-  // --- FAST LOADER ---
+  // --- FAST LOADER (Only Today's Data) ---
   const loadDailyView = async (targetDate, showLoading = true) => {
     try {
         if (showLoading) setLoading(true);
@@ -146,15 +110,17 @@ export default function DailyView() {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
+        // OPTIMIZED: Fetch only data relevant to the Date View
         const [weights, cLogs, daysLogs, routines, allExercises, mData] = await Promise.all([
-            getBodyWeights(), 
-            getCardioLogsByDate(dateStr), 
-            getLogsByDate(dateStr),
+            getBodyWeights(), // Usually small enough to fetch all
+            getCardioLogsByDate(dateStr), // FETCH BY DATE
+            getLogsByDate(dateStr),       // FETCH BY DATE
             getRoutines(),
             getExercises(),
-            getCircumferences()
+            getCircumferences()           // Usually small enough
         ]);
 
+        // Process Daily Data
         const existingWeight = weights.find(w => w.date === dateStr);
         setViewWeight(existingWeight ? existingWeight.weight : null);
         const daysMeasurements = mData.filter(m => m.date === dateStr);
@@ -165,6 +131,7 @@ export default function DailyView() {
         const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
         setCompletedIds(doneIds);
 
+        // Routine Logic
         const swapKey = `onyx_swap_${dateStr}`;
         const swappedRoutineId = localStorage.getItem(swapKey);
         let routine = null;
@@ -192,26 +159,15 @@ export default function DailyView() {
 
             setExercises(mergedData);
 
-            // Re-hydrate inputs only if they are empty (don't overwrite user typing)
-            setSetInputs(prev => {
-                const newInputs = { ...prev };
-                mergedData.forEach(ex => {
-                    if (!newInputs[ex.id]) {
-                        if (ex.existingLog) {
-                            newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
-                        } else {
-                            newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
-                        }
-                    } else if (ex.existingLog) {
-                        // If log updated in background, sync it
-                        // NOTE: This might overwrite typing if sync happens while typing. 
-                        // But since this only runs on "Resume", the keyboard is likely closed.
-                        newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
-                    }
-                });
-                return newInputs;
+            const initialInputs = {};
+            mergedData.forEach(ex => {
+                if (ex.existingLog) {
+                    initialInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
+                } else {
+                    initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
+                }
             });
-
+            setSetInputs(initialInputs);
         } else {
             setExercises([]);
             setRoutineCardio([]);
@@ -223,13 +179,17 @@ export default function DailyView() {
     }
   };
 
-  // --- BACKGROUND LOADER ---
+  // --- BACKGROUND LOADER (History & PRs) ---
   const loadHistoryStats = async () => {
     if (exercises.length === 0) return;
+
+    // Fetch full history silently
     const allLogs = await getLogs(); 
     
+    // 1. Calculate Last Performance
     const historyStats = {};
     exercises.forEach(ex => {
+        // Find logs strictly BEFORE today for "Last Performance"
         const pastLogs = allLogs.filter(l => 
             String(l.exercise_id || l.exerciseId) === String(ex.id) && 
             new Date(l.date) < new Date(getDateStr(viewDate)) 
@@ -239,13 +199,16 @@ export default function DailyView() {
             const lastLog = pastLogs[0]; 
             const sets = lastLog.sets || [];
             if (sets.length > 0) {
-                const bestSet = sets.reduce((prev, current) => (Number(current.weight) > Number(prev.weight) ? current : prev), sets[0]);
+                const bestSet = sets.reduce((prev, current) => 
+                (Number(current.weight) > Number(prev.weight) ? current : prev)
+                , sets[0]);
                 historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
             }
         }
     });
     setLastPerformances(historyStats);
 
+    // 2. Calculate PRs (All Time)
     const prMap = {};
     exercises.forEach(ex => {
         const exerciseLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
@@ -304,6 +267,7 @@ export default function DailyView() {
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
 
+    // Optimistic PR Check (Uses local PR state)
     const previousMax = personalRecords[exId] || 0;
     let newMax = 0;
     validSets.forEach(s => { const w = parseFloat(s.weight); if (w > newMax) newMax = w; });
@@ -319,7 +283,9 @@ export default function DailyView() {
     if (existingLog) { await updateLog({ ...existingLog, sets: validSets }); } 
     else { await addLog(dateStr, exId, validSets); }
 
+    // Silent reload of Today's data
     loadDailyView(viewDate, false);
+    // Background update of PRs
     loadHistoryStats();
   };
 
@@ -328,7 +294,7 @@ export default function DailyView() {
   // Render Helpers
   const viewDateStr = getDateStr(viewDate);
   const isToday = viewDateStr === todayDateStr;
-  const dayName = DAYS[viewDate.getDay()];
+  const dayName = DAYS[viewDate.getDay()]; // Fixed reference error
   const formattedDate = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const isScheduledRest = currentRoutine && currentRoutine.exercises.length === 0 && (!currentRoutine.cardio || currentRoutine.cardio.length === 0);
   const isNoRoutine = !currentRoutine;

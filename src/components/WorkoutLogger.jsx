@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'; // Added useRef
-import confetti from 'canvas-confetti';
-import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager';
+import React, { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti'; // Import Confetti
+import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager'; // Added getLogs
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
 
@@ -17,9 +17,7 @@ export default function WorkoutLogger() {
 
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
-  const [personalRecords, setPersonalRecords] = useState({}); 
-  
-  // Initialize date to today
+  const [personalRecords, setPersonalRecords] = useState({}); // Store PRs
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
@@ -27,45 +25,34 @@ export default function WorkoutLogger() {
   const [cardioDuration, setCardioDuration] = useState('');
   const [cardioDistance, setCardioDistance] = useState('');
 
-  // Keep a ref of the current date state so the listener can check it
-  const dateRef = useRef(date);
-
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
-  // Update ref whenever date changes
-  useEffect(() => { dateRef.current = date; }, [date]);
-
-  // --- DATA LOADER (Extracted for reuse) ---
-  const loadData = async () => {
-    // Fetch Exercises AND Logs to calculate PRs
-    const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
-    setExercises(loadedEx);
-    
-    // Only set default exercise if not already set (preserves selection on refresh)
-    if (loadedEx.length > 0) {
-        setExerciseId(prev => prev || loadedEx[0].id);
-    }
-
-    // Calculate PR map
-    const prMap = {};
-    loadedEx.forEach(ex => {
-      const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
-      let max = 0;
-      pastLogs.forEach(log => {
-          if (log.sets) {
-              log.sets.forEach(s => {
-                  const w = parseFloat(s.weight);
-                  if (w > max) max = w;
-              });
-          }
-      });
-      prMap[ex.id] = max;
-    });
-    setPersonalRecords(prMap);
-  };
-
   useEffect(() => {
-    loadData();
+    const fetchData = async () => {
+      // Fetch Exercises AND Logs to calculate PRs
+      const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
+      setExercises(loadedEx);
+      if (loadedEx.length > 0) setExerciseId(loadedEx[0].id);
+
+      // Calculate PR map
+      const prMap = {};
+      loadedEx.forEach(ex => {
+        const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+        let max = 0;
+        pastLogs.forEach(log => {
+            if (log.sets) {
+                log.sets.forEach(s => {
+                    const w = parseFloat(s.weight);
+                    if (w > max) max = w;
+                });
+            }
+        });
+        prMap[ex.id] = max;
+      });
+      setPersonalRecords(prMap);
+    };
+    
+    fetchData();
 
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
@@ -73,32 +60,7 @@ export default function WorkoutLogger() {
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
-
-    // --- NEW: VISIBILITY LISTENER ---
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-            const today = new Date().toISOString().split('T')[0];
-            
-            // 1. Auto-update date if day rolled over while app was backgrounded
-            // Only update if the user hadn't manually selected a different past date
-            // (We assume if dateRef matches the *app load* date logic, it's safe to update)
-            if (dateRef.current !== today) {
-                setDate(today);
-            }
-
-            // 2. Refresh Data (Fixes Desync)
-            loadData();
-        }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-
-    return () => {
-        window.removeEventListener('storage', loadSettings);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('focus', handleVisibilityChange);
-    };
+    return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
   const openConfirm = (title, message, onConfirm, isDestructive = false) => {
@@ -134,7 +96,9 @@ export default function WorkoutLogger() {
       const oldMax = personalRecords[exerciseId] || 0;
 
       if (currentMax > oldMax && oldMax > 0) {
+        // CHECK SETTING BEFORE FIRING
         const confettiEnabled = localStorage.getItem('onyx_show_confetti') !== 'false';
+        
         if (confettiEnabled) {
             confetti({
                 particleCount: 150,
@@ -148,7 +112,7 @@ export default function WorkoutLogger() {
       // 2. Save
       await addLog(date, exerciseId, validSets);
       
-      // 3. Update local PR state
+      // 3. Update local PR state (so next log is accurate without reload)
       if (currentMax > oldMax) {
         setPersonalRecords(prev => ({ ...prev, [exerciseId]: currentMax }));
       }
