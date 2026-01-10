@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager';
-import ConfirmModal from './ConfirmModal'; 
-import PlateCalculator from './PlateCalculator'; 
+import ConfirmModal from './ConfirmModal';
+import PlateCalculator from './PlateCalculator';
+import SearchableSelect from './SearchableSelect';
 
 const getLocalDate = () => {
   const now = new Date();
@@ -15,9 +16,9 @@ const getLocalDate = () => {
 export default function WorkoutLogger() {
   const [mode, setMode] = useState('lifting');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false });
-  const [weightUnit, setWeightUnit] = useState('lbs'); 
-  const [distUnit, setDistUnit] = useState('mi'); 
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => { }, isDestructive: false });
+  const [weightUnit, setWeightUnit] = useState('lbs');
+  const [distUnit, setDistUnit] = useState('mi');
 
   // Calculator State
   const [showCalc, setShowCalc] = useState(false);
@@ -25,8 +26,8 @@ export default function WorkoutLogger() {
 
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
-  const [personalRecords, setPersonalRecords] = useState({}); 
-  
+  const [personalRecords, setPersonalRecords] = useState({});
+
   const [date, setDate] = useState(getLocalDate());
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
@@ -39,34 +40,34 @@ export default function WorkoutLogger() {
   useEffect(() => {
     const loadData = async () => {
       try {
-          const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
-          setExercises(loadedEx);
-          if (loadedEx.length > 0) setExerciseId(prev => prev || loadedEx[0].id);
+        const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
+        setExercises(loadedEx);
+        if (loadedEx.length > 0) setExerciseId(prev => prev || loadedEx[0].id);
 
-          const prMap = {};
-          loadedEx.forEach(ex => {
-            const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
-            let max = 0;
-            pastLogs.forEach(log => {
-                if (log.sets) {
-                    log.sets.forEach(s => {
-                        const w = parseFloat(s.weight);
-                        if (w > max) max = w;
-                    });
-                }
-            });
-            prMap[ex.id] = max;
+        const prMap = {};
+        loadedEx.forEach(ex => {
+          const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+          let max = 0;
+          pastLogs.forEach(log => {
+            if (log.sets) {
+              log.sets.forEach(s => {
+                const w = parseFloat(s.weight);
+                if (w > max) max = w;
+              });
+            }
           });
-          setPersonalRecords(prMap);
+          prMap[ex.id] = max;
+        });
+        setPersonalRecords(prMap);
       } catch (error) {
-          console.error("Error loading logger data", error);
+        console.error("Error loading logger data", error);
       }
     };
     loadData();
 
     const loadSettings = () => {
-        setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
-        setDistUnit((localStorage.getItem('onyx_unit_distance') || 'mi').toLowerCase());
+      setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
+      setDistUnit((localStorage.getItem('onyx_unit_distance') || 'mi').toLowerCase());
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
@@ -98,7 +99,7 @@ export default function WorkoutLogger() {
   const saveLift = async () => {
     const validSets = sets.filter(s => s.weight && s.reps);
     if (validSets.length === 0) { openConfirm("Missing Data", "Please enter weight and reps for at least one set."); return; }
-    
+
     setIsSubmitting(true);
     try {
       const currentMax = Math.max(...validSets.map(s => parseFloat(s.weight) || 0));
@@ -107,17 +108,17 @@ export default function WorkoutLogger() {
       if (currentMax > oldMax && oldMax > 0) {
         const confettiEnabled = localStorage.getItem('onyx_show_confetti') !== 'false';
         if (confettiEnabled) {
-            confetti({
-                particleCount: 150,
-                spread: 70,
-                origin: { y: 0.6 },
-                colors: ['#22c55e', '#ffffff', '#fbbf24']
-            });
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#22c55e', '#ffffff', '#fbbf24']
+          });
         }
       }
 
       await addLog(date, exerciseId, validSets);
-      
+
       if (currentMax > oldMax) {
         setPersonalRecords(prev => ({ ...prev, [exerciseId]: currentMax }));
       }
@@ -139,7 +140,7 @@ export default function WorkoutLogger() {
   return (
     <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
       <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
-      
+
       <PlateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} initialWeight={calcInitWeight} unit={weightUnit} />
 
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
@@ -156,19 +157,22 @@ export default function WorkoutLogger() {
           </div>
           <div className="mb-4">
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Exercise</label>
-            <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">
-              {exercises.map(ex => (<option key={ex.id} value={ex.id}>{ex.name}</option>))}
-            </select>
+            <SearchableSelect
+              options={exercises}
+              value={exerciseId}
+              onChange={setExerciseId}
+              placeholder="Select Exercise..."
+            />
           </div>
           <div className="space-y-2 mb-4">
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
                 <div className="flex-1 relative">
-                    <input type="number" placeholder={weightUnit} value={set.weight} onChange={(e) => handleSetChange(index, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
-                    <button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-                    </button>
+                  <input type="number" placeholder={weightUnit} value={set.weight} onChange={(e) => handleSetChange(index, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
+                  <button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                  </button>
                 </div>
                 <div className="flex-1"><input type="number" placeholder="reps" value={set.reps} onChange={(e) => handleSetChange(index, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" /></div>
                 <button onClick={() => handleRemoveSet(index)} className="text-red-500 px-2">✕</button>

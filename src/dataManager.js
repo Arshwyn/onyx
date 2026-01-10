@@ -7,22 +7,23 @@ const getUser = async () => {
 };
 
 // --- 1. EXERCISES ---
+// Categories removed from defaults as per request "remove any mention"
 const DEFAULT_EXERCISES = [
-    { id: 'ex_1', name: 'Squat', category: 'Legs' },
-    { id: 'ex_2', name: 'Bench Press', category: 'Push' },
-    { id: 'ex_3', name: 'Deadlift', category: 'Pull' },
-    { id: 'ex_4', name: 'Overhead Press', category: 'Push' },
-    { id: 'ex_5', name: 'Dumbbell Row', category: 'Pull' },
-    { id: 'ex_6', name: 'Lunges', category: 'Legs' },
-    { id: 'ex_7', name: 'Pull Up', category: 'Pull' },
-    { id: 'ex_8', name: 'Dips', category: 'Push' },
-    { id: 'ex_9', name: 'Lateral Raise', category: 'Push' },
-    { id: 'ex_10', name: 'Bicep Curl', category: 'Pull' },
-    { id: 'ex_11', name: 'Tricep Extension', category: 'Push' },
-    { id: 'ex_12', name: 'Leg Press', category: 'Legs' },
-    { id: 'ex_13', name: 'Leg Curl', category: 'Legs' },
-    { id: 'ex_14', name: 'Calf Raise', category: 'Legs' },
-    { id: 'ex_15', name: 'Face Pull', category: 'Pull' }
+    { id: 'ex_1', name: 'Squat' },
+    { id: 'ex_2', name: 'Bench Press' },
+    { id: 'ex_3', name: 'Deadlift' },
+    { id: 'ex_4', name: 'Overhead Press' },
+    { id: 'ex_5', name: 'Dumbbell Row' },
+    { id: 'ex_6', name: 'Lunges' },
+    { id: 'ex_7', name: 'Pull Up' },
+    { id: 'ex_8', name: 'Dips' },
+    { id: 'ex_9', name: 'Lateral Raise' },
+    { id: 'ex_10', name: 'Bicep Curl' },
+    { id: 'ex_11', name: 'Tricep Extension' },
+    { id: 'ex_12', name: 'Leg Press' },
+    { id: 'ex_13', name: 'Leg Curl' },
+    { id: 'ex_14', name: 'Calf Raise' },
+    { id: 'ex_15', name: 'Face Pull' }
 ];
 
 export const getExercises = async () => {
@@ -32,28 +33,34 @@ export const getExercises = async () => {
     const custom = data || [];
     const formattedCustom = custom.map(e => ({ ...e, id: String(e.id) }));
 
-    return [...DEFAULT_EXERCISES, ...formattedCustom];
+    const allExercises = [...DEFAULT_EXERCISES, ...formattedCustom];
+    
+    // Sort alphabetically (added in previous step)
+    allExercises.sort((a, b) => a.name.localeCompare(b.name));
+
+    return allExercises;
 };
 
-export const addExercise = async (name, category) => {
+// UPDATED: No longer accepts 'category' argument
+export const addExercise = async (name) => {
     const userId = await getUser();
     const { data, error } = await supabase.from('custom_exercises').insert([{
         user_id: userId,
         name,
-        category
+        category: 'Custom' // Default value to satisfy potential DB requirement
     }]).select();
 
     if (error) console.error(error);
     return data;
 };
 
+// ... (Rest of file - deleteCustomExercise, getRoutines, etc. - remains exactly the same)
 export const deleteCustomExercise = async (id) => {
     if (String(id).startsWith('ex_')) return;
     const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
     if (error) console.error(error);
 };
 
-// --- 2. ROUTINES ---
 export const getRoutines = async () => {
     const { data, error } = await supabase.from('routines').select('*');
     if (error) console.error('Error fetching routines:', error);
@@ -86,7 +93,6 @@ export const deleteRoutine = async (id) => {
     if (error) console.error(error);
 };
 
-// --- 3. LOGS (LIFTING) ---
 export const getLogs = async () => {
     const { data, error } = await supabase.from('workout_logs').select('*');
     if (error) console.error('Error fetching logs:', error);
@@ -120,20 +126,6 @@ export const updateLog = async (log) => {
     return data;
 };
 
-export const getLogsRange = async (startDate, endDate) => {
-    let query = supabase.from('workout_logs').select('*');
-    if (startDate) query = query.gte('date', startDate);
-    if (endDate) query = query.lte('date', endDate);
-    
-    // Default sort if not handling in UI
-    query = query.order('date', { ascending: false });
-
-    const { data, error } = await query;
-    if (error) console.error(error);
-    return data || [];
-};
-
-// --- 4. BODY WEIGHT ---
 export const getBodyWeights = async () => {
     const { data, error } = await supabase.from('body_weights').select('*');
     if (error) console.error(error);
@@ -156,7 +148,6 @@ export const deleteBodyWeight = async (id) => {
     if (error) console.error(error);
 };
 
-// --- 5. CARDIO ---
 export const getCardioLogs = async () => {
     const { data, error } = await supabase.from('cardio_logs').select('*');
     if (error) console.error(error);
@@ -195,18 +186,6 @@ export const updateCardioLog = async (log) => {
         .select();
     if (error) console.error(error);
     return await getCardioLogs();
-};
-
-export const getCardioLogsRange = async (startDate, endDate) => {
-    let query = supabase.from('cardio_logs').select('*');
-    if (startDate) query = query.gte('date', startDate);
-    if (endDate) query = query.lte('date', endDate);
-    
-    query = query.order('date', { ascending: false });
-
-    const { data, error } = await query;
-    if (error) console.error(error);
-    return data || [];
 };
 
 export const getCircumferences = async () => {
@@ -261,8 +240,27 @@ export const updateUserSettings = async (settings) => {
     if (error) console.error('Error updating settings:', error);
 };
 
-// --- PERFORMANCE OPTIMIZATIONS ---
+export const getLogsRange = async (startDate, endDate) => {
+    let query = supabase.from('workout_logs').select('*');
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    query = query.order('date', { ascending: false });
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
+};
 
+export const getCardioLogsRange = async (startDate, endDate) => {
+    let query = supabase.from('cardio_logs').select('*');
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    query = query.order('date', { ascending: false });
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
+};
+
+// ... (keep legacy functions for safety)
 export const getLogsByDate = async (dateStr) => {
   const { data, error } = await supabase
     .from('workout_logs') 

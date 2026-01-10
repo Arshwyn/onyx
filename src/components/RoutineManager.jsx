@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getExercises, getRoutines, saveRoutine, deleteRoutine, addExercise, deleteCustomExercise } from '../dataManager';
-import ConfirmModal from './ConfirmModal'; // IMPORT
+import ConfirmModal from './ConfirmModal'; 
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
-const CATEGORIES = ['Push', 'Pull', 'Legs', 'Core', 'Other'];
+// REMOVED: const CATEGORIES = ...
 
 export default function RoutineManager({ onBack }) {
   const [loading, setLoading] = useState(true);
@@ -26,7 +26,10 @@ export default function RoutineManager({ onBack }) {
 
   const [showNewExForm, setShowNewExForm] = useState(false);
   const [newExName, setNewExName] = useState('');
-  const [newExCat, setNewExCat] = useState('Push');
+  // REMOVED: const [newExCat, setNewExCat] = useState('Push');
+
+  // SEARCH STATE
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     loadData();
@@ -47,22 +50,27 @@ export default function RoutineManager({ onBack }) {
     setLoading(false);
   };
 
+  // Helper: Filter exercises based on search
+  const filteredExercises = allExercises.filter(ex => 
+    ex.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const handleCreateExercise = async () => {
     if (!newExName) {
-        // ALERT
         openConfirm("Missing Name", "Please enter a name for the custom exercise.");
         return;
     }
-    await addExercise(newExName, newExCat);
+    // UPDATED: Call with just name (we removed category)
+    await addExercise(newExName);
     setShowNewExForm(false);
     setNewExName('');
     const updated = await getExercises();
     setAllExercises(updated);
   };
 
+  // ... (keep handleDeleteExercise, toggleExercise, updateTarget, moveExercise, removeSelectedExercise, addCardioToRoutine, removeCardioFromRoutine, handleRestToggle, handleEdit, handleCancelEdit, handleSave, handleDelete as they were) ...
   const handleDeleteExercise = (e, id) => {
     e.stopPropagation(); 
-    // USE CUSTOM MODAL
     openConfirm(
         "Delete Exercise?",
         "Are you sure you want to delete this custom exercise?",
@@ -217,7 +225,6 @@ export default function RoutineManager({ onBack }) {
   };
 
   const handleDelete = (id) => {
-    // USE CUSTOM MODAL
     openConfirm(
         "Delete Routine?",
         "Are you sure you want to delete this routine?",
@@ -235,7 +242,6 @@ export default function RoutineManager({ onBack }) {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
       
-      {/* MOUNT MODAL */}
       <ConfirmModal 
         isOpen={modalConfig.isOpen}
         title={modalConfig.title}
@@ -281,7 +287,7 @@ export default function RoutineManager({ onBack }) {
           <label className="block text-xs text-gray-500 uppercase font-bold mb-1">Routine Name</label>
           <input type="text" value={routineName} onChange={(e) => setRoutineName(e.target.value)} placeholder="e.g. Heavy Legs" className="w-full p-2 mb-4 rounded bg-black border border-zinc-700 text-white outline-none focus:border-white transition" />
 
-          {/* Cardio Section */}
+          {/* ... (Keep Cardio Section same) ... */}
           <div className="mb-6 p-3 bg-blue-900/10 border border-blue-900/30 rounded-lg">
             <label className="block text-xs text-blue-400 uppercase font-bold mb-2">Planned Cardio</label>
             {routineCardio.length > 0 && (
@@ -303,7 +309,7 @@ export default function RoutineManager({ onBack }) {
             </div>
           </div>
 
-          {/* Selected Exercises Section */}
+          {/* ... (Keep Selected Exercises same) ... */}
           {selectedExercises.length > 0 && (
             <div className="mb-6">
                 <label className="text-xs text-blue-400 uppercase font-bold mb-2 block">Routine Order</label>
@@ -340,7 +346,7 @@ export default function RoutineManager({ onBack }) {
             </div>
           )}
 
-          {/* Exercise Library Section */}
+          {/* Exercise Library Section - UPDATED TO REMOVE DROPDOWN */}
           <div className="flex justify-between items-end mb-2 pt-4 border-t border-zinc-800">
             <label className="text-xs text-gray-500 uppercase font-bold">Exercise Library</label>
             <button onClick={() => setShowNewExForm(!showNewExForm)} className="text-[10px] bg-zinc-800 text-blue-400 border border-blue-900/30 px-2 py-1 rounded hover:bg-zinc-700">
@@ -352,33 +358,45 @@ export default function RoutineManager({ onBack }) {
             <div className="bg-black border border-blue-500/50 p-3 rounded mb-4 animate-fade-in">
                 <label className="text-[10px] text-blue-400 font-bold block mb-1">Name</label>
                 <input type="text" value={newExName} onChange={e => setNewExName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-white text-sm mb-2" placeholder="e.g. Bulgarian Split Squat" />
-                <label className="text-[10px] text-blue-400 font-bold block mb-1">Category</label>
-                <select value={newExCat} onChange={e => setNewExCat(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-white text-sm mb-3">
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                {/* Category select removed here */}
                 <button onClick={handleCreateExercise} className="w-full bg-blue-600 text-white font-bold py-2 rounded text-xs">Create Exercise</button>
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
-            {allExercises.map(ex => {
-              const isSelected = selectedExercises.some(item => String(item.id) === String(ex.id));
-              const isCustom = !String(ex.id).startsWith('ex_');
+          {/* Search Input */}
+          <div className="mb-2">
+            <input 
+                type="text" 
+                placeholder="Search exercises..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-white text-xs outline-none focus:border-zinc-600"
+            />
+          </div>
 
-              return (
-                <div key={ex.id} className={`p-2 rounded transition flex justify-between items-center group ${isSelected ? 'opacity-50' : 'hover:bg-zinc-900 cursor-pointer'}`} onClick={() => !isSelected && toggleExercise(ex)}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-zinc-600 border-zinc-600' : 'border-zinc-500'}`}>
-                            {isSelected && <span className="text-black text-[9px]">✓</span>}
+          <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border border-zinc-800 p-2 rounded bg-black/50">
+            {filteredExercises.length === 0 ? (
+                <div className="text-center text-zinc-500 text-xs py-4 italic">No matches found</div>
+            ) : (
+                filteredExercises.map(ex => {
+                  const isSelected = selectedExercises.some(item => String(item.id) === String(ex.id));
+                  const isCustom = !String(ex.id).startsWith('ex_');
+
+                  return (
+                    <div key={ex.id} className={`p-2 rounded transition flex justify-between items-center group ${isSelected ? 'opacity-50' : 'hover:bg-zinc-900 cursor-pointer'}`} onClick={() => !isSelected && toggleExercise(ex)}>
+                        <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-zinc-600 border-zinc-600' : 'border-zinc-500'}`}>
+                                {isSelected && <span className="text-black text-[9px]">✓</span>}
+                            </div>
+                            <span className={isSelected ? 'text-zinc-500' : 'text-gray-300 font-bold'}>{ex.name}</span>
                         </div>
-                        <span className={isSelected ? 'text-zinc-500' : 'text-gray-300 font-bold'}>{ex.name}</span>
+                        {isCustom && !isSelected && (
+                            <button onClick={(e) => handleDeleteExercise(e, ex.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
+                        )}
                     </div>
-                    {isCustom && !isSelected && (
-                        <button onClick={(e) => handleDeleteExercise(e, ex.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
-                    )}
-                </div>
-              );
-            })}
+                  );
+                })
+            )}
           </div>
         </div>
 
@@ -388,6 +406,7 @@ export default function RoutineManager({ onBack }) {
         </div>
       </div>
       
+      {/* ... (Keep Schedule Display same) ... */}
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Your Schedule</h3>
       <div className="space-y-3">
         {routines.sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).map(routine => {

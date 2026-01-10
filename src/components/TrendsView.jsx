@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getBodyWeights, addBodyWeight, deleteBodyWeight, 
+import {
+  getBodyWeights, addBodyWeight, deleteBodyWeight,
   getLogs, getExercises,
-  getCircumferences, addCircumference, deleteCircumference 
+  getCircumferences, addCircumference, deleteCircumference
 } from '../dataManager';
-import ConfirmModal from './ConfirmModal'; // IMPORT
+import ConfirmModal from './ConfirmModal';
+import SearchableSelect from './SearchableSelect';
 
 const getLocalDate = () => {
   const now = new Date();
@@ -16,21 +17,21 @@ const getLocalDate = () => {
 
 export default function TrendsView() {
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState('exercises'); 
-  
+  const [mode, setMode] = useState('exercises');
+
   // --- MODAL STATE ---
   const [modalConfig, setModalConfig] = useState({
-    isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false
+    isOpen: false, title: '', message: '', onConfirm: () => { }, isDestructive: false
   });
 
   // --- SETTINGS STATE ---
-  const [weightUnit, setWeightUnit] = useState('lbs'); 
-  const [measureUnit, setMeasureUnit] = useState('in'); 
+  const [weightUnit, setWeightUnit] = useState('lbs');
+  const [measureUnit, setMeasureUnit] = useState('in');
 
   // --- STATE: EXERCISES ---
   const [exercises, setExercises] = useState([]);
   const [selectedExId, setSelectedExId] = useState('');
-  const [exerciseData, setExerciseData] = useState([]); 
+  const [exerciseData, setExerciseData] = useState([]);
 
   // --- STATE: BODY WEIGHT ---
   const [bodyData, setBodyData] = useState([]);
@@ -38,8 +39,8 @@ export default function TrendsView() {
   const [inputDate, setInputDate] = useState(getLocalDate());
 
   // --- STATE: MEASUREMENTS ---
-  const [measurementData, setMeasurementData] = useState([]); 
-  const [filteredMeasurements, setFilteredMeasurements] = useState([]); 
+  const [measurementData, setMeasurementData] = useState([]);
+  const [filteredMeasurements, setFilteredMeasurements] = useState([]);
   const [bodyPart, setBodyPart] = useState('Waist');
   const [inputMeasurement, setInputMeasurement] = useState('');
   const [measureDate, setMeasureDate] = useState(getLocalDate());
@@ -50,8 +51,8 @@ export default function TrendsView() {
     loadAllData();
 
     const loadSettings = () => {
-        setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
-        setMeasureUnit((localStorage.getItem('onyx_unit_measure') || 'in').toLowerCase());
+      setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
+      setMeasureUnit((localStorage.getItem('onyx_unit_measure') || 'in').toLowerCase());
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
@@ -77,7 +78,7 @@ export default function TrendsView() {
       getBodyWeights(),
       getExercises(),
       getLogs(),
-      getCircumferences() 
+      getCircumferences()
     ]);
 
     bData.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -93,7 +94,7 @@ export default function TrendsView() {
   const calculateExerciseTrend = async (exId) => {
     const allLogs = await getLogs();
     const relevantLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(exId));
-    
+
     const points = relevantLogs.map(log => {
       const sets = log.sets || [];
       const maxWeight = sets.reduce((max, set) => Math.max(max, parseFloat(set.weight) || 0), 0);
@@ -107,7 +108,7 @@ export default function TrendsView() {
   const filterMeasurements = (part) => {
     const filtered = measurementData
       .filter(m => m.body_part === part)
-      .map(m => ({ ...m, weight: m.measurement })) 
+      .map(m => ({ ...m, weight: m.measurement }))
       .sort((a, b) => new Date(a.date) - new Date(b.date));
     setFilteredMeasurements(filtered);
   };
@@ -123,14 +124,14 @@ export default function TrendsView() {
   const handleDeleteMeasurement = (id) => {
     // USE CUSTOM MODAL
     openConfirm(
-        "Delete Measurement?",
-        "Are you sure you want to delete this measurement?",
-        async () => {
-            await deleteCircumference(id);
-            const mData = await getCircumferences();
-            setMeasurementData(mData);
-        },
-        true
+      "Delete Measurement?",
+      "Are you sure you want to delete this measurement?",
+      async () => {
+        await deleteCircumference(id);
+        const mData = await getCircumferences();
+        setMeasurementData(mData);
+      },
+      true
     );
   };
 
@@ -146,15 +147,15 @@ export default function TrendsView() {
   const handleDeleteWeight = (id) => {
     // USE CUSTOM MODAL
     openConfirm(
-        "Delete Weight Entry?",
-        "Are you sure you want to delete this weight log?",
-        async () => {
-            await deleteBodyWeight(id);
-            const bData = await getBodyWeights();
-            bData.sort((a, b) => new Date(a.date) - new Date(b.date));
-            setBodyData(bData);
-        },
-        true
+      "Delete Weight Entry?",
+      "Are you sure you want to delete this weight log?",
+      async () => {
+        await deleteBodyWeight(id);
+        const bData = await getBodyWeights();
+        bData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        setBodyData(bData);
+      },
+      true
     );
   };
 
@@ -170,8 +171,8 @@ export default function TrendsView() {
     const width = 100;
     const height = 50;
     const values = dataPoints.map(p => p.weight);
-    const minVal = Math.min(...values) * 0.95; 
-    const maxVal = Math.max(...values) * 1.05; 
+    const minVal = Math.min(...values) * 0.95;
+    const maxVal = Math.max(...values) * 1.05;
     const range = maxVal - minVal || 1;
 
     const pathD = dataPoints.map((point, index) => {
@@ -188,9 +189,9 @@ export default function TrendsView() {
         <svg viewBox="0 0 100 50" className="w-full h-32 stroke-blue-400 stroke-2 fill-none overflow-visible">
           <polyline points={pathD} vectorEffect="non-scaling-stroke" />
           {dataPoints.map((p, i) => {
-             const x = (i / (dataPoints.length - 1)) * width;
-             const y = height - ((p.weight - minVal) / range) * height;
-             return <circle cx={x} cy={y} r="1.5" className="fill-black stroke-white stroke-[0.5]" key={i} />
+            const x = (i / (dataPoints.length - 1)) * width;
+            const y = height - ((p.weight - minVal) / range) * height;
+            return <circle cx={x} cy={y} r="1.5" className="fill-black stroke-white stroke-[0.5]" key={i} />
           })}
         </svg>
         <div className="flex justify-between text-[10px] text-zinc-600 mt-2 font-mono">
@@ -205,9 +206,9 @@ export default function TrendsView() {
 
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
-      
+
       {/* MOUNT MODAL */}
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={modalConfig.isOpen}
         title={modalConfig.title}
         message={modalConfig.message}
@@ -229,19 +230,22 @@ export default function TrendsView() {
         <div className="animate-fade-in">
           <div className="mb-6">
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-2">Select Exercise</label>
-            <select value={selectedExId} onChange={(e) => setSelectedExId(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-3 text-white outline-none">
-              {exercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
-            </select>
+            <SearchableSelect
+              options={exercises}
+              value={selectedExId}
+              onChange={setSelectedExId}
+              placeholder="Select Exercise..."
+            />
           </div>
           {renderChart(exerciseData)}
           <div className="space-y-2">
-             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">Log History</h3>
-             {[...exerciseData].reverse().map((entry, idx) => (
-               <div key={idx} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
-                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
-                 <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
-               </div>
-             ))}
+            <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">Log History</h3>
+            {[...exerciseData].reverse().map((entry, idx) => (
+              <div key={idx} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
+                <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
+                <span className="font-bold text-white">{entry.weight} <span className="text-xs text-zinc-600 font-normal">{weightUnit.toLowerCase()}</span></span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -264,7 +268,7 @@ export default function TrendsView() {
           {renderChart(bodyData)}
           <div className="space-y-2">
             <h3 className="text-xs text-zinc-500 font-bold uppercase mb-2">History</h3>
-            {[...bodyData].sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => (
+            {[...bodyData].sort((a, b) => new Date(b.date) - new Date(a.date)).map(entry => (
               <div key={entry.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800/50">
                 <span className="text-zinc-400 text-xs font-mono">{entry.date}</span>
                 <div className="flex items-center gap-4">
@@ -281,10 +285,10 @@ export default function TrendsView() {
         <div className="animate-fade-in">
           <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
             <div className="mb-3">
-                <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Body Part</label>
-                <select value={bodyPart} onChange={(e) => setBodyPart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
-                    {BODY_PARTS.map(part => <option key={part} value={part}>{part}</option>)}
-                </select>
+              <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Body Part</label>
+              <select value={bodyPart} onChange={(e) => setBodyPart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
+                {BODY_PARTS.map(part => <option key={part} value={part}>{part}</option>)}
+              </select>
             </div>
             <div className="flex gap-2 items-end">
               <div className="flex-1 min-w-0">

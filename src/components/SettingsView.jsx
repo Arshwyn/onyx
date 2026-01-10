@@ -180,8 +180,6 @@ function CustomExercisesSettings() {
   const [newCat, setNewCat] = useState('Push');
   const [modalConfig, setModalConfig] = useState({ isOpen: false });
 
-  const CATEGORIES = ['Push', 'Pull', 'Legs', 'Core', 'Other'];
-
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
@@ -230,10 +228,7 @@ function CustomExercisesSettings() {
             placeholder="Exercise Name"
         />
         <div className="flex gap-2">
-            <select value={newCat} onChange={e => setNewCat(e.target.value)} className="bg-black border border-zinc-700 rounded p-2 text-white text-sm outline-none">
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={handleAdd} className="flex-1 bg-white text-black font-bold rounded text-xs uppercase hover:bg-gray-200">Add</button>
+            <button onClick={handleAdd} className="w-full bg-white text-black font-bold py-3 rounded text-xs uppercase hover:bg-gray-200 transition">Add</button>
         </div>
       </div>
 
@@ -247,7 +242,6 @@ function CustomExercisesSettings() {
                     <div key={ex.id} className="flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800">
                         <div>
                             <span className="text-sm font-bold text-gray-200 block">{ex.name}</span>
-                            <span className="text-[10px] text-zinc-500 uppercase">{ex.category}</span>
                         </div>
                         <button onClick={() => handleDelete(ex.id)} className="text-zinc-600 hover:text-red-500 px-2">✕</button>
                     </div>
