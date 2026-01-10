@@ -10,7 +10,7 @@ import {
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
 
-export default function DailyView() {
+export default function DailyView({ refreshTrigger }) {
   const [loading, setLoading] = useState(true);
   
   // Settings
@@ -53,10 +53,6 @@ export default function DailyView() {
   // Cardio
   const [viewCardioLogs, setViewCardioLogs] = useState([]); 
   const [routineCardio, setRoutineCardio] = useState([]);     
-  const [cardioType, setCardioType] = useState('Run');
-  const [cardioDuration, setCardioDuration] = useState(''); 
-  const [cardioDistance, setCardioDistance] = useState(''); 
-  const [showCardioForm, setShowCardioForm] = useState(false);
 
   // States
   const [isAdHocRest, setIsAdHocRest] = useState(false);
@@ -71,6 +67,7 @@ export default function DailyView() {
     const dateStr = now.toISOString().split('T')[0];
     setTodayDateStr(dateStr);
     
+    // Initial load
     loadDailyView(now);
 
     const loadSettings = () => {
@@ -88,7 +85,14 @@ export default function DailyView() {
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
-  // Background fetch for history (PRs/Last Stats)
+  // --- SMART RESUME HANDLER ---
+  useEffect(() => {
+      if (refreshTrigger) {
+          console.log("DailyView: Background refresh triggered.");
+          loadDailyView(viewDate, false); 
+      }
+  }, [refreshTrigger]);
+
   useEffect(() => {
     loadHistoryStats();
   }, [exercises]);
@@ -97,7 +101,7 @@ export default function DailyView() {
   const openConfirm = (title, message, onConfirm, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal) => { setCalcInitWeight(weightVal); setShowCalc(true); };
 
-  // --- MAIN LOADER (Optimized) ---
+  // --- MAIN LOADER ---
   const loadDailyView = async (targetDate, showLoading = true) => {
     try {
         if (showLoading) setLoading(true);
@@ -109,7 +113,6 @@ export default function DailyView() {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
-        // Fetch only data relevant to the Date View
         const [weights, cLogs, daysLogs, routines, allExercises, mData] = await Promise.all([
             getBodyWeights(), 
             getCardioLogsByDate(dateStr), 
@@ -156,15 +159,19 @@ export default function DailyView() {
 
             setExercises(mergedData);
 
-            const initialInputs = {};
-            mergedData.forEach(ex => {
-                if (ex.existingLog) {
-                    initialInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
-                } else {
-                    initialInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
-                }
+            setSetInputs(prev => {
+                const newInputs = { ...prev };
+                mergedData.forEach(ex => {
+                    if (!newInputs[ex.id]) {
+                        if (ex.existingLog) {
+                            newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
+                        } else {
+                            newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
+                        }
+                    } 
+                });
+                return newInputs;
             });
-            setSetInputs(initialInputs);
 
         } else {
             setExercises([]);
@@ -177,11 +184,9 @@ export default function DailyView() {
     }
   };
 
-  // --- HISTORY STATS LOADER (Background) ---
+  // --- BACKGROUND LOADER ---
   const loadHistoryStats = async () => {
     if (exercises.length === 0) return;
-    
-    // Fetch full history silently for stats
     const allLogs = await getLogs(); 
     
     const historyStats = {};
@@ -242,7 +247,6 @@ export default function DailyView() {
   const handleSaveMeasurement = async () => { if (!measureValue) { openConfirm("Missing Value", "Please enter a measurement value before saving."); return; } const dateStr = getDateStr(viewDate); await addCircumference(dateStr, measurePart, measureValue); setMeasureValue(''); const mData = await getCircumferences(); const daysMeasurements = mData.filter(m => m.date === dateStr); setViewMeasurements(daysMeasurements); };
   const handleDeleteMeasurement = (id) => { openConfirm('Delete Measurement?', 'Are you sure you want to remove this entry?', async () => { const dateStr = getDateStr(viewDate); await deleteCircumference(id); const mData = await getCircumferences(); const daysMeasurements = mData.filter(m => m.date === dateStr); setViewMeasurements(daysMeasurements); }, true); };
   
-  const handleSaveCardio = async () => { if (!cardioDuration) { openConfirm("Missing Duration", "Please enter a duration in minutes."); return; } const dateStr = getDateStr(viewDate); const dist = cardioDistance === '' ? null : cardioDistance; const newLogs = await addCardioLog(dateStr, cardioType, cardioDuration, dist); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); setCardioDuration(''); setCardioDistance(''); setShowCardioForm(false); };
   const handleCompletePlannedCardio = async (plannedItem) => { const dateStr = getDateStr(viewDate); const dist = (plannedItem.distance === '' || plannedItem.distance === undefined) ? null : plannedItem.distance; const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, dist); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); };
   const handleDeleteCardio = (id) => { openConfirm('Delete Session?', 'Remove this cardio log from your history?', async () => { const dateStr = getDateStr(viewDate); const newLogs = await deleteCardioLog(id); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); }, true); };
 
@@ -326,10 +330,6 @@ export default function DailyView() {
       {isAdHocRest ? (<div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800"><div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div><h2 className="text-2xl font-black italic uppercase text-white mb-2">Taking it Easy</h2><p className="text-zinc-500 text-sm mb-6">Recovery is when the growth happens.</p><button onClick={handleToggleAdHocRest} className="text-xs text-zinc-600 underline hover:text-white">No, I actually want to workout</button></div>) : isScheduledRest ? (<div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 rounded-xl border border-zinc-800"><div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4"><span className="text-3xl">☕</span></div><h2 className="text-2xl font-black italic uppercase text-white mb-2">Scheduled Rest</h2><p className="text-zinc-500 text-sm mb-6">Enjoy your day off.</p></div>) : isNoRoutine ? (<div className="text-center mt-10 text-gray-500"><p>No routine scheduled for {dayName}.</p><p className="text-xs mt-4">Go to "Settings" to set up a routine.</p></div>) : (
         <div className="space-y-4 mb-8">{exercises.map((ex, idx) => { const strId = String(ex.id); const isComplete = completedIds.includes(strId); const isExpanded = expandedIds.includes(strId); const showBody = !isComplete || isExpanded; const lastStats = lastPerformances[ex.id]; const currentSets = setInputs[ex.id] || []; let maxLifted = 0; currentSets.forEach(s => { const w = parseFloat(s.weight); if (w > maxLifted) maxLifted = w; }); const prevMax = personalRecords[ex.id] || 0; const isPR = maxLifted > prevMax && prevMax > 0 && isComplete; return (<div key={ex.id} className={`rounded-lg overflow-hidden transition-all duration-300 border ${isComplete ? 'bg-zinc-900 border-green-900/50' : 'bg-zinc-900 border-zinc-800'}`}><div onClick={() => isComplete && toggleExpand(ex.id)} className={`p-4 flex justify-between items-center ${isComplete ? 'cursor-pointer select-none' : ''}`}><div className="flex-1 min-w-0"><div className="flex items-center gap-2"><h3 className={`font-bold text-lg truncate ${isComplete ? 'text-green-400 line-through' : 'text-gray-200'}`}>{ex.name}</h3>{isPR && <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black px-2 py-0.5 rounded border border-yellow-500/50 flex items-center gap-1">🏆 PR</span>}{isComplete && !isPR && <span className="bg-green-900 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">Done</span>}</div><span className="text-xs text-gray-500 uppercase">{ex.category}</span></div><div className="text-right flex flex-col items-end gap-2 ml-2 flex-shrink-0">{!isComplete && (<div className="flex gap-1 mb-1"><button onClick={(e) => moveExercise(idx, -1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === 0 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg></button><button onClick={(e) => moveExercise(idx, 1, e)} className={`w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition ${idx === exercises.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></button></div>)}{isComplete ? (<div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">{isExpanded ? 'Hide' : 'Show'} <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span></div>) : (<><div className="mb-1"><span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span><span className="text-sm font-mono text-blue-400 font-bold">{ex.targetSets} x {ex.targetReps}</span></div>{lastStats && <div><span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span><span className="text-sm font-mono text-gray-300">{lastStats}</span></div>}</>)}</div></div>{showBody && (<div className={isComplete ? "opacity-50" : ""}><div className="px-4 pb-4 space-y-3"><div className="flex text-[10px] text-gray-500 uppercase font-bold px-1"><div className="w-8 text-center">Set</div><div className="flex-1 text-center">{weightUnit.toLowerCase()}</div><div className="flex-1 text-center">Reps</div></div>{setInputs[ex.id]?.map((set, idx) => (<div key={idx} className="flex gap-3 items-center"><div className="w-8 text-center text-zinc-600 font-bold text-sm">{idx + 1}</div><div className="flex-1 relative"><input type="number" placeholder="-" value={set.weight} onChange={(e) => handleSetChange(ex.id, idx, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" /><button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg></button></div><div className="flex-1"><input type="number" placeholder="-" value={set.reps} onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" /></div></div>))}</div><div className="p-3 bg-zinc-800/20 border-t border-zinc-800"><button onClick={() => handleLogExercise(ex.id)} className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition tracking-widest text-xs uppercase">{isComplete ? 'Update Log' : 'Complete Exercise'}</button></div></div>)}</div>); })}</div>
       )}
-
-      {/* ADDITIONAL CARDIO */}
-      {!isAdHocRest && !showCardioForm && (<button onClick={() => setShowCardioForm(true)} className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 text-xs font-bold uppercase rounded hover:bg-zinc-900 transition">+ Log Additional Cardio</button>)}
-      {showCardioForm && (<div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg animate-fade-in mb-8"><div className="flex justify-between items-center mb-3"><span className="text-xs text-blue-400 font-bold uppercase">New Cardio Session</span><button onClick={() => setShowCardioForm(false)} className="text-zinc-500 hover:text-white">✕</button></div><div className="space-y-3"><div><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Type</label><select value={cardioType} onChange={(e) => setCardioType(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none">{CARDIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div><div className="flex gap-3"><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Duration (min)</label><input type="number" value={cardioDuration} onChange={(e) => setCardioDuration(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder="0" /></div><div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Distance (opt)</label><input type="number" value={cardioDistance} onChange={(e) => setCardioDistance(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none" placeholder={distUnit.toLowerCase()} /></div></div><button onClick={handleSaveCardio} className="w-full bg-white text-black font-bold py-2 rounded text-sm hover:bg-gray-200 mt-2">Log Cardio</button></div></div>)}
     </div>
   );
 }
