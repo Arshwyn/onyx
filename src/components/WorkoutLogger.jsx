@@ -4,6 +4,14 @@ import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
 
+const getLocalDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function WorkoutLogger() {
   const [mode, setMode] = useState('lifting');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +27,7 @@ export default function WorkoutLogger() {
   const [exerciseId, setExerciseId] = useState('');
   const [personalRecords, setPersonalRecords] = useState({}); 
   
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDate());
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
   const [cardioType, setCardioType] = useState('Run');

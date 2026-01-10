@@ -6,6 +6,14 @@ import {
 } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; // IMPORT
 
+const getLocalDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function TrendsView() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('exercises'); 
@@ -27,14 +35,14 @@ export default function TrendsView() {
   // --- STATE: BODY WEIGHT ---
   const [bodyData, setBodyData] = useState([]);
   const [inputWeight, setInputWeight] = useState('');
-  const [inputDate, setInputDate] = useState(new Date().toISOString().split('T')[0]);
+  const [inputDate, setInputDate] = useState(getLocalDate());
 
   // --- STATE: MEASUREMENTS ---
   const [measurementData, setMeasurementData] = useState([]); 
   const [filteredMeasurements, setFilteredMeasurements] = useState([]); 
   const [bodyPart, setBodyPart] = useState('Waist');
   const [inputMeasurement, setInputMeasurement] = useState('');
-  const [measureDate, setMeasureDate] = useState(new Date().toISOString().split('T')[0]);
+  const [measureDate, setMeasureDate] = useState(getLocalDate());
 
   const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
 

@@ -64,7 +64,7 @@ export default function DailyView({ refreshTrigger }) {
 
   useEffect(() => {
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
+    const dateStr = getDateStr(now); // Use the helper instead of toISOString()
     setTodayDateStr(dateStr);
     
     // Initial load
@@ -97,7 +97,12 @@ export default function DailyView({ refreshTrigger }) {
     loadHistoryStats();
   }, [exercises]);
 
-  const getDateStr = (dateObj) => dateObj.toISOString().split('T')[0];
+  const getDateStr = (dateObj) => {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   const openConfirm = (title, message, onConfirm, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal) => { setCalcInitWeight(weightVal); setShowCalc(true); };
 
