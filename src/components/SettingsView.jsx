@@ -8,7 +8,8 @@ import {
 } from '../dataManager'; 
 import ConfirmModal from './ConfirmModal';
 
-export default function SettingsView({ onNavigate }) {
+// UPDATED: Destructure resetTrigger from props
+export default function SettingsView({ onNavigate, resetTrigger }) {
   const [viewMode, setViewMode] = useState('hub'); // hub, custom_exercises, display, units
   const [userEmail, setUserEmail] = useState('');
 
@@ -16,13 +17,19 @@ export default function SettingsView({ onNavigate }) {
   const [weightUnit, setWeightUnit] = useState('lbs');
   const [measureUnit, setMeasureUnit] = useState('in');
   const [distUnit, setDistUnit] = useState('mi');
-  // Default to 30, 60, 90 if nothing is saved
   const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
   
   const [showTimer, setShowTimer] = useState(true);
   const [showConfetti, setShowConfetti] = useState(true);
   const [showBW, setShowBW] = useState(true);
   const [showMeas, setShowMeas] = useState(true);
+
+  // NEW: Watch for reset signal from App.jsx
+  useEffect(() => {
+    if (resetTrigger > 0) {
+        setViewMode('hub');
+    }
+  }, [resetTrigger]);
 
   useEffect(() => {
     // Load local settings on mount
@@ -122,8 +129,7 @@ export default function SettingsView({ onNavigate }) {
   );
 }
 
-// --- SUB-COMPONENTS ---
-
+// ... (Rest of file - SettingsHub, CustomExercisesSettings, etc. - remains exactly the same)
 function SettingsHub({ onNavigate, onChangeView }) {
   const handleLogout = async () => {
     await supabase.auth.signOut();

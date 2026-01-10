@@ -22,6 +22,9 @@ export default function App() {
   const [isResuming, setIsResuming] = useState(false);
   const [refreshKey, setRefreshKey] = useState(Date.now());
 
+  // NEW: Trigger to force SettingsView to reset to hub
+  const [settingsResetTrigger, setSettingsResetTrigger] = useState(0);
+
   // 1. Persist View
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
@@ -142,6 +145,16 @@ export default function App() {
     }
   };
 
+  // NEW: Logic to handle clicking the Settings tab
+  const handleSettingsClick = () => {
+    if (view === 'settings') {
+        // If already on settings, increment trigger to force reset to hub
+        setSettingsResetTrigger(prev => prev + 1);
+    } else {
+        setView('settings');
+    }
+  };
+
   if (!session) return <AuthPage />;
 
   return (
@@ -158,7 +171,12 @@ export default function App() {
 
         {view === 'log' && <WorkoutLogger />}
 
-        {view === 'settings' && <SettingsView onNavigate={setView} />}
+        {view === 'settings' && (
+            <SettingsView 
+                onNavigate={setView} 
+                resetTrigger={settingsResetTrigger} // PASS THE PROP HERE
+            />
+        )}
 
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />}
 
@@ -172,7 +190,14 @@ export default function App() {
           <NavButton active={view === 'log'} onClick={() => setView('log')} icon="plus" label="Log" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon="clock" label="History" />
           <NavButton active={view === 'trends'} onClick={() => setView('trends')} icon="chart" label="Trends" />
-          <NavButton active={view === 'settings' || view === 'routine_manager'} onClick={() => setView('settings')} icon="settings" label="Settings" />
+          
+          {/* UPDATED: Use handleSettingsClick instead of inline setView */}
+          <NavButton 
+            active={view === 'settings' || view === 'routine_manager'} 
+            onClick={handleSettingsClick} 
+            icon="settings" 
+            label="Settings" 
+          />
         </div>
       </nav>
     </div>
