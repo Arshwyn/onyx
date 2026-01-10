@@ -1,13 +1,18 @@
 import { supabase } from './supabaseClient';
 
-// --- UTILITY: TIMEOUT WRAPPER ---
-// Forces any DB request to fail if it takes longer than 6 seconds
-// This prevents the "hanging" UI when the connection is a zombie
-const withTimeout = (promise, ms = 6000) => {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), ms))
-    ]);
+// --- UTILITY: RETRY WRAPPER ---
+// If a request fails (e.g., zombie connection), wait 500ms and try once more.
+const withRetry = async (fn, retries = 1) => {
+    try {
+        return await fn();
+    } catch (error) {
+        if (retries > 0) {
+            console.warn("DB Request failed, retrying...", error);
+            await new Promise(r => setTimeout(r, 500)); // Wait 500ms
+            return withRetry(fn, retries - 1);
+        }
+        throw error;
+    }
 };
 
 // --- HELPER: Get Current User ---
@@ -36,38 +41,40 @@ const DEFAULT_EXERCISES = [
 ];
 
 export const getExercises = async () => {
-    const { data, error } = await supabase.from('custom_exercises').select('*');
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('custom_exercises').select('*');
+        if (error) throw error;
 
-    const custom = data || [];
-    const formattedCustom = custom.map(e => ({ ...e, id: String(e.id) }));
-
-    return [...DEFAULT_EXERCISES, ...formattedCustom];
+        const custom = data || [];
+        const formattedCustom = custom.map(e => ({ ...e, id: String(e.id) }));
+        return [...DEFAULT_EXERCISES, ...formattedCustom];
+    });
 };
 
 export const addExercise = async (name, category) => {
     const userId = await getUser();
-    const { data, error } = await supabase.from('custom_exercises').insert([{
-        user_id: userId,
-        name,
-        category
-    }]).select();
-
-    if (error) console.error(error);
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('custom_exercises').insert([{ user_id: userId, name, category }]).select();
+        if (error) throw error;
+        return data;
+    });
 };
 
 export const deleteCustomExercise = async (id) => {
     if (String(id).startsWith('ex_')) return;
-    const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
+        if (error) throw error;
+    });
 };
 
 // --- 2. ROUTINES ---
 export const getRoutines = async () => {
-    const { data, error } = await supabase.from('routines').select('*');
-    if (error) console.error('Error fetching routines:', error);
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('routines').select('*');
+        if (error) throw error;
+        return data || [];
+    });
 };
 
 export const saveRoutine = async (routine) => {
@@ -80,211 +87,217 @@ export const saveRoutine = async (routine) => {
         cardio: routine.cardio || []
     };
 
-    if (routine.id) {
-        const { data, error } = await supabase.from('routines').update(payload).eq('id', routine.id).select();
-        if (error) console.error(error);
-        return data;
-    } else {
-        const { data, error } = await supabase.from('routines').insert([payload]).select();
-        if (error) console.error(error);
-        return data;
-    }
+    return withRetry(async () => {
+        if (routine.id) {
+            const { data, error } = await supabase.from('routines').update(payload).eq('id', routine.id).select();
+            if (error) throw error;
+            return data;
+        } else {
+            const { data, error } = await supabase.from('routines').insert([payload]).select();
+            if (error) throw error;
+            return data;
+        }
+    });
 };
 
 export const deleteRoutine = async (id) => {
-    const { error } = await supabase.from('routines').delete().eq('id', id);
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('routines').delete().eq('id', id);
+        if (error) throw error;
+    });
 };
 
 // --- 3. LOGS (LIFTING) ---
 export const getLogs = async () => {
-    const { data, error } = await supabase.from('workout_logs').select('*');
-    if (error) console.error('Error fetching logs:', error);
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('workout_logs').select('*');
+        if (error) throw error;
+        return data || [];
+    });
 };
 
 export const addLog = async (date, exerciseId, sets) => {
     const userId = await getUser();
-    const { data, error } = await supabase.from('workout_logs').insert([{
-        user_id: userId,
-        date,
-        exercise_id: String(exerciseId),
-        sets
-    }]).select();
-    if (error) console.error(error);
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('workout_logs').insert([{
+            user_id: userId,
+            date,
+            exercise_id: String(exerciseId),
+            sets
+        }]).select();
+        if (error) throw error;
+        return data;
+    });
 };
 
 export const deleteLog = async (id) => {
-    const { error } = await supabase.from('workout_logs').delete().eq('id', id);
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+        if (error) throw error;
+    });
 };
 
 export const updateLog = async (log) => {
-    const { data, error } = await supabase
-        .from('workout_logs')
-        .update({ sets: log.sets, date: log.date })
-        .eq('id', log.id)
-        .select();
-    if (error) console.error(error);
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('workout_logs').update({ sets: log.sets, date: log.date }).eq('id', log.id).select();
+        if (error) throw error;
+        return data;
+    });
 };
 
 // --- 4. BODY WEIGHT ---
 export const getBodyWeights = async () => {
-    const { data, error } = await supabase.from('body_weights').select('*');
-    if (error) console.error(error);
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('body_weights').select('*');
+        if (error) throw error;
+        return data || [];
+    });
 };
 
 export const addBodyWeight = async (weight, date) => {
     const userId = await getUser();
-    const { data, error } = await supabase.from('body_weights').insert([{
-        user_id: userId,
-        date,
-        weight
-    }]).select();
-    if (error) console.error(error);
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('body_weights').insert([{ user_id: userId, date, weight }]).select();
+        if (error) throw error;
+        return data;
+    });
 };
 
 export const deleteBodyWeight = async (id) => {
-    const { error } = await supabase.from('body_weights').delete().eq('id', id);
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('body_weights').delete().eq('id', id);
+        if (error) throw error;
+    });
 };
 
 // --- 5. CARDIO ---
 export const getCardioLogs = async () => {
-    const { data, error } = await supabase.from('cardio_logs').select('*');
-    if (error) console.error(error);
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('cardio_logs').select('*');
+        if (error) throw error;
+        return data || [];
+    });
 };
 
 export const addCardioLog = async (date, type, duration, distance) => {
     const userId = await getUser();
-    const { data, error } = await supabase.from('cardio_logs').insert([{
-        user_id: userId,
-        date,
-        type,
-        duration,
-        distance
-    }]).select();
-    if (error) console.error(error);
-    return await getCardioLogs();
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('cardio_logs').insert([{ user_id: userId, date, type, duration, distance }]).select();
+        if (error) throw error;
+        return await getCardioLogs();
+    });
 };
 
 export const deleteCardioLog = async (id) => {
-    const { error } = await supabase.from('cardio_logs').delete().eq('id', id);
-    if (error) console.error(error);
-    return await getCardioLogs();
+    return withRetry(async () => {
+        const { error } = await supabase.from('cardio_logs').delete().eq('id', id);
+        if (error) throw error;
+        return await getCardioLogs();
+    });
 };
 
 export const updateCardioLog = async (log) => {
-    const { data, error } = await supabase
-        .from('cardio_logs')
-        .update({
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('cardio_logs').update({
             date: log.date,
             type: log.type,
             duration: log.duration,
             distance: log.distance
-        })
-        .eq('id', log.id)
-        .select();
-    if (error) console.error(error);
-    return await getCardioLogs();
+        }).eq('id', log.id).select();
+        if (error) throw error;
+        return await getCardioLogs();
+    });
 };
 
 export const getCircumferences = async () => {
-    const { data, error } = await supabase.from('circumferences').select('*');
-    if (error) console.error(error);
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('circumferences').select('*');
+        if (error) throw error;
+        return data || [];
+    });
 };
 
 export const addCircumference = async (date, bodyPart, measurement) => {
     const userId = await getUser();
-    const { data, error } = await supabase.from('circumferences').insert([{
-        user_id: userId,
-        date,
-        body_part: bodyPart,
-        measurement
-    }]).select();
-    if (error) console.error(error);
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('circumferences').insert([{ user_id: userId, date, body_part: bodyPart, measurement }]).select();
+        if (error) throw error;
+        return data;
+    });
 };
 
 export const deleteCircumference = async (id) => {
-    const { error } = await supabase.from('circumferences').delete().eq('id', id);
-    if (error) console.error(error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('circumferences').delete().eq('id', id);
+        if (error) throw error;
+    });
 };
 
 export const getUserSettings = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-    if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching settings:', error);
-        return null;
-    }
-
-    return data;
+    return withRetry(async () => {
+        const { data, error } = await supabase.from('user_settings').select('*').eq('user_id', user.id).single();
+        if (error && error.code !== 'PGRST116') throw error;
+        return data;
+    });
 };
 
 export const updateUserSettings = async (settings) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase
-        .from('user_settings')
-        .upsert({ user_id: user.id, ...settings });
-
-    if (error) console.error('Error updating settings:', error);
+    return withRetry(async () => {
+        const { error } = await supabase.from('user_settings').upsert({ user_id: user.id, ...settings });
+        if (error) throw error;
+    });
 };
 
-// --- PERFORMANCE OPTIMIZATIONS (FIXED TABLE NAMES) ---
+// --- PERFORMANCE OPTIMIZATIONS ---
 
-// 1. Fetch logs ONLY for a specific date
 export const getLogsByDate = async (dateStr) => {
-  const { data, error } = await supabase
-    .from('workout_logs') // Fixed: was 'logs'
-    .select('*')
-    .eq('date', dateStr);
-  if (error) throw error;
-  return data;
+  return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('workout_logs') 
+        .select('*')
+        .eq('date', dateStr);
+      if (error) throw error;
+      return data;
+  });
 };
 
-// 2. Fetch cardio ONLY for a specific date
 export const getCardioLogsByDate = async (dateStr) => {
-  const { data, error } = await supabase
-    .from('cardio_logs')
-    .select('*')
-    .eq('date', dateStr);
-  if (error) throw error;
-  return data;
+  return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('cardio_logs')
+        .select('*')
+        .eq('date', dateStr);
+      if (error) throw error;
+      return data;
+  });
 };
 
-// 3. Fetch History with a Limit (Pagination)
 export const getRecentLogs = async (limit = 50) => {
-  const { data, error } = await supabase
-    .from('workout_logs') // Fixed: was 'logs'
-    .select('*')
-    .order('date', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data;
+  return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('workout_logs') 
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data;
+  });
 };
 
 export const getRecentCardioLogs = async (limit = 50) => {
-  const { data, error } = await supabase
-    .from('cardio_logs')
-    .select('*')
-    .order('date', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data;
+  return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('cardio_logs')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data;
+  });
 };
