@@ -16,22 +16,30 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
+  // State to control Timer visibility
   const [showTimer, setShowTimer] = useState(true);
 
+  // 1. Persist View Selection
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
 
+  // 2. Local Storage Listener for Timer (Instant Toggle)
   useEffect(() => {
     const checkTimerSetting = () => {
       const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
       setShowTimer(!isHidden);
     };
+    
+    // Check initially
     checkTimerSetting();
+
+    // Listen for updates from SettingsView
     window.addEventListener('storage', checkTimerSetting);
     return () => window.removeEventListener('storage', checkTimerSetting);
   }, []);
 
+  // 3. Auth & Settings Sync (Includes Resume Listener)
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -45,7 +53,27 @@ export default function App() {
       if (session) await syncSettings();
     });
 
-    return () => subscription.unsubscribe();
+    // --- RESUME LISTENER (Fixes Mobile Desync) ---
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session); // Re-validate session
+        if (session) await syncSettings(); // Re-fetch settings
+        
+        // Force update local state from storage in case it changed elsewhere
+        const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
+        setShowTimer(!isHidden);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+        subscription.unsubscribe();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, []);
 
   const syncSettings = async () => {
@@ -57,13 +85,13 @@ export default function App() {
       localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
       localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       
-      const timerVisible = dbSettings.show_timer !== false; 
+      // Sync Toggles
+      const timerVisible = dbSettings.show_timer !== false; // Default True
       localStorage.setItem('onyx_show_timer', timerVisible);
 
       const confettiEnabled = dbSettings.show_confetti !== false; 
       localStorage.setItem('onyx_show_confetti', confettiEnabled);
 
-      // NEW: Sync Dashboard Visibility Settings
       const showBW = dbSettings.show_body_weight !== false;
       const showMeas = dbSettings.show_measurements !== false;
       localStorage.setItem('onyx_show_bw', showBW);
@@ -71,6 +99,7 @@ export default function App() {
       
       window.dispatchEvent(new Event('storage'));
     } else {
+      // Create defaults if user has no settings row
       await updateUserSettings({
         weight_unit: 'lbs',
         measure_unit: 'in',
@@ -78,8 +107,8 @@ export default function App() {
         timer_increments: [30, 60, 90],
         show_timer: true,
         show_confetti: true,
-        show_body_weight: true, // Default True
-        show_measurements: true // Default True
+        show_body_weight: true,
+        show_measurements: true
       });
     }
   };
@@ -98,6 +127,7 @@ export default function App() {
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
       </div>
       
+      {/* CONDITIONAL RENDER */}
       {showTimer && <RestTimer />}
 
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
