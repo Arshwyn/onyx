@@ -18,7 +18,8 @@ export default function App() {
   
   const [showTimer, setShowTimer] = useState(true);
   
-  // refreshKey is used to force-remount components to "resubscribe" to data
+  // New State: explicitly tracks if we are in the middle of a "Resume" action
+  const [isResuming, setIsResuming] = useState(false);
   const [refreshKey, setRefreshKey] = useState(Date.now());
 
   // 1. Persist View
@@ -39,7 +40,6 @@ export default function App() {
 
   // 3. Auth & Connection Management
   useEffect(() => {
-    // Initial Session Load
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -47,7 +47,6 @@ export default function App() {
     };
     initSession();
 
-    // Auth State Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session) await syncSettings();
@@ -56,42 +55,42 @@ export default function App() {
     // --- RESUME / RE-SYNC LOGIC ---
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        console.log("App resumed. Checking connection...");
+        console.log("App resumed. Starting recovery...");
 
         const { data: { session: currentSession } } = await supabase.auth.getSession();
 
         if (currentSession) {
-            console.log("Session exists. Force unsubscribing channels...");
-            
-            // TIMEOUT HELPER: Prevents hanging forever on zombie connections
+            // A. ENTER RESUME MODE
+            // This unmounts DailyView/HistoryView immediately, stopping any pending stale requests
+            setIsResuming(true);
+
+            // TIMEOUT HELPER
             const safeAwait = (promise, ms = 2000) => Promise.race([
                 promise,
                 new Promise(resolve => setTimeout(() => resolve('timeout'), ms))
             ]);
 
-            // 1. FORCE UNSUBSCRIBE (With Timeout)
-            // Even if this hangs, we move on after 2 seconds
+            // B. CLEANUP & HANDSHAKE
             await safeAwait(supabase.removeAllChannels());
-
-            console.log("Channels cleared (or timed out). Refreshing Auth...");
-
-            // 2. REFRESH AUTH (With Timeout)
-            // Force a handshake. If it hangs, we assume connection is dead but will try to reload UI anyway.
+            console.log("Channels cleared. Refreshing Auth...");
             await safeAwait(supabase.auth.getUser());
             
-            console.log("Handshake complete. Reloading views...");
-            
-            setSession(currentSession); // Ensure state is fresh
-            
-            // 3. RESUBSCRIBE (Force Remount)
-            // This is the most important part: it kills the old view and starts a fresh one.
+            // C. SYNC & WAIT
+            // We force a 500ms delay to let the socket reconnect fully before mounting views
+            console.log("Handshake done. Waiting for socket stability...");
+            await new Promise(r => setTimeout(r, 500));
+
+            // D. RESTORE UI
+            setSession(currentSession);
             setRefreshKey(Date.now());
-            
-            // Re-sync local settings (non-blocking)
-            syncSettings();
+            await syncSettings();
             
             const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
             setShowTimer(!isHidden);
+            
+            // Turn off resume mode -> Mounts components -> Triggers data fetch
+            setIsResuming(false);
+            console.log("UI Restored.");
         }
       }
     };
@@ -146,19 +145,30 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
-        {/* The 'key' prop forces a complete unmount/remount on resume */}
-        {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
-        {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
-        {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
         
-        {/* We do NOT key the Logger to prevent losing typed input if you tab out quickly */}
-        {view === 'log' && <WorkoutLogger />}
-        
-        {view === 'settings' && <SettingsView onNavigate={setView} />}
-        {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
+        {/* GLOBAL LOADER DURING RESUME */}
+        {/* This prevents the views from mounting/fetching until the connection is definitely ready */}
+        {isResuming ? (
+            <div className="flex flex-col items-center justify-center pt-32 animate-pulse">
+                <div className="text-zinc-500 text-sm font-mono mb-2">Reconnecting...</div>
+            </div>
+        ) : (
+            <>
+                {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
+                {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
+                {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
+                
+                {/* Logger keeps its state unless we are hard-resetting everything */}
+                {view === 'log' && <WorkoutLogger />}
+                
+                {view === 'settings' && <SettingsView onNavigate={setView} />}
+                {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
+            </>
+        )}
+
       </div>
       
-      {showTimer && <RestTimer />}
+      {showTimer && !isResuming && <RestTimer />}
 
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">
         <div className="max-w-md mx-auto flex justify-between px-6 py-4">
