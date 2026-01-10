@@ -16,25 +16,30 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
+  // State to control Timer visibility
   const [showTimer, setShowTimer] = useState(true);
-  
-  // Refresh Key state to force re-renders on resume
-  const [refreshKey, setRefreshKey] = useState(Date.now());
 
+  // 1. Persist View Selection
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
 
+  // 2. Local Storage Listener for Timer (Instant Toggle)
   useEffect(() => {
     const checkTimerSetting = () => {
       const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
       setShowTimer(!isHidden);
     };
+    
+    // Check initially
     checkTimerSetting();
+
+    // Listen for updates from SettingsView
     window.addEventListener('storage', checkTimerSetting);
     return () => window.removeEventListener('storage', checkTimerSetting);
   }, []);
 
+  // 3. Auth & Settings Sync (Includes Resume Listener)
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -48,20 +53,14 @@ export default function App() {
       if (session) await syncSettings();
     });
 
-    // --- RESUME LISTENER (Global Fix) ---
+    // --- RESUME LISTENER (Fixes Mobile Desync) ---
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        console.log("App resumed - Waking up connection...");
-        
-        // 1. Force Daily/History/Trends to remount and fetch fresh data
-        setRefreshKey(Date.now());
-
-        // 2. Wake up Auth Session (Fixes 'hanging' Logger requests)
         const { data: { session } } = await supabase.auth.getSession();
-        setSession(session); 
+        setSession(session); // Re-validate session
+        if (session) await syncSettings(); // Re-fetch settings
         
-        if (session) await syncSettings();
-        
+        // Force update local state from storage in case it changed elsewhere
         const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
         setShowTimer(!isHidden);
       }
@@ -86,7 +85,8 @@ export default function App() {
       localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
       localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
       
-      const timerVisible = dbSettings.show_timer !== false; 
+      // Sync Toggles
+      const timerVisible = dbSettings.show_timer !== false; // Default True
       localStorage.setItem('onyx_show_timer', timerVisible);
 
       const confettiEnabled = dbSettings.show_confetti !== false; 
@@ -99,6 +99,7 @@ export default function App() {
       
       window.dispatchEvent(new Event('storage'));
     } else {
+      // Create defaults if user has no settings row
       await updateUserSettings({
         weight_unit: 'lbs',
         measure_unit: 'in',
@@ -117,17 +118,16 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
-        {/* KEY PROP: Forces remount on resume */}
-        {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
-        {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
-        {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
-        
-        {/* No key on Logger/Settings to preserve text input */}
+        {view === 'daily' && <DailyView />}
+        {view === 'history' && <HistoryView />}
+        {view === 'trends' && <TrendsView />}
         {view === 'log' && <WorkoutLogger />}
+        
         {view === 'settings' && <SettingsView onNavigate={setView} />}
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
       </div>
       
+      {/* CONDITIONAL RENDER */}
       {showTimer && <RestTimer />}
 
       <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-900 safe-area-pb z-50">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // Added useRef
 import confetti from 'canvas-confetti';
 import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
@@ -19,6 +19,7 @@ export default function WorkoutLogger() {
   const [exerciseId, setExerciseId] = useState('');
   const [personalRecords, setPersonalRecords] = useState({}); 
   
+  // Initialize date to today
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
@@ -26,48 +27,78 @@ export default function WorkoutLogger() {
   const [cardioDuration, setCardioDuration] = useState('');
   const [cardioDistance, setCardioDistance] = useState('');
 
+  // Keep a ref of the current date state so the listener can check it
+  const dateRef = useRef(date);
+
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
-  // Removed internal resume listener (handled by App.jsx session wake-up)
+  // Update ref whenever date changes
+  useEffect(() => { dateRef.current = date; }, [date]);
 
+  // --- DATA LOADER (Extracted for reuse) ---
   const loadData = async () => {
-    try {
-        const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
-        setExercises(loadedEx);
-        
-        if (loadedEx.length > 0) {
-            setExerciseId(prev => prev || loadedEx[0].id);
-        }
-
-        const prMap = {};
-        loadedEx.forEach(ex => {
-          const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
-          let max = 0;
-          pastLogs.forEach(log => {
-              if (log.sets) {
-                  log.sets.forEach(s => {
-                      const w = parseFloat(s.weight);
-                      if (w > max) max = w;
-                  });
-              }
-          });
-          prMap[ex.id] = max;
-        });
-        setPersonalRecords(prMap);
-    } catch (error) {
-        console.error("Error loading logger data", error);
+    // Fetch Exercises AND Logs to calculate PRs
+    const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
+    setExercises(loadedEx);
+    
+    // Only set default exercise if not already set (preserves selection on refresh)
+    if (loadedEx.length > 0) {
+        setExerciseId(prev => prev || loadedEx[0].id);
     }
+
+    // Calculate PR map
+    const prMap = {};
+    loadedEx.forEach(ex => {
+      const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+      let max = 0;
+      pastLogs.forEach(log => {
+          if (log.sets) {
+              log.sets.forEach(s => {
+                  const w = parseFloat(s.weight);
+                  if (w > max) max = w;
+              });
+          }
+      });
+      prMap[ex.id] = max;
+    });
+    setPersonalRecords(prMap);
   };
 
   useEffect(() => {
     loadData();
+
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
         setDistUnit((localStorage.getItem('onyx_unit_distance') || 'mi').toLowerCase());
     };
     loadSettings();
     window.addEventListener('storage', loadSettings);
-    return () => window.removeEventListener('storage', loadSettings);
+
+    // --- NEW: VISIBILITY LISTENER ---
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 1. Auto-update date if day rolled over while app was backgrounded
+            // Only update if the user hadn't manually selected a different past date
+            // (We assume if dateRef matches the *app load* date logic, it's safe to update)
+            if (dateRef.current !== today) {
+                setDate(today);
+            }
+
+            // 2. Refresh Data (Fixes Desync)
+            loadData();
+        }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+        window.removeEventListener('storage', loadSettings);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, []);
 
   const openConfirm = (title, message, onConfirm, isDestructive = false) => {
@@ -97,8 +128,8 @@ export default function WorkoutLogger() {
     if (validSets.length === 0) { openConfirm("Missing Data", "Please enter weight and reps for at least one set."); return; }
     
     setIsSubmitting(true);
-    
     try {
+      // 1. Check for PR
       const currentMax = Math.max(...validSets.map(s => parseFloat(s.weight) || 0));
       const oldMax = personalRecords[exerciseId] || 0;
 
@@ -114,20 +145,16 @@ export default function WorkoutLogger() {
         }
       }
 
+      // 2. Save
       await addLog(date, exerciseId, validSets);
       
+      // 3. Update local PR state
       if (currentMax > oldMax) {
         setPersonalRecords(prev => ({ ...prev, [exerciseId]: currentMax }));
       }
 
       openConfirm("Workout Logged", "Great work! Your session has been saved to history.", () => { setSets([{ weight: '', reps: '' }]); }, false);
-    } catch (err) { 
-        console.error(err);
-        // Fallback error (no timeout logic anymore per request)
-        openConfirm("Error", "Could not save workout. Please try again.", null, true); 
-    } finally { 
-        setIsSubmitting(false); 
-    }
+    } catch (err) { openConfirm("Error", "Could not save workout. Please try again.", null, true); } finally { setIsSubmitting(false); }
   };
 
   const saveCardio = async () => {
@@ -137,19 +164,20 @@ export default function WorkoutLogger() {
       const dist = cardioDistance === '' ? null : cardioDistance;
       await addCardioLog(date, cardioType, cardioDuration, dist);
       openConfirm("Cardio Logged", "Nice endurance! Your session has been saved.", () => { setCardioDuration(''); setCardioDistance(''); }, false);
-    } catch (err) { 
-        console.error(err);
-        openConfirm("Error", "Could not save cardio. Please try again.", null, true); 
-    } finally { 
-        setIsSubmitting(false); 
-    }
+    } catch (err) { openConfirm("Error", "Could not save cardio. Please try again.", null, true); } finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
       <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
       
-      <PlateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} initialWeight={calcInitWeight} unit={weightUnit} />
+      {/* PLATE CALCULATOR */}
+      <PlateCalculator 
+        isOpen={showCalc} 
+        onClose={() => setShowCalc(false)} 
+        initialWeight={calcInitWeight} 
+        unit={weightUnit} 
+      />
 
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
       <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-6">
@@ -173,15 +201,20 @@ export default function WorkoutLogger() {
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
+                
+                {/* WEIGHT INPUT WRAPPER */}
                 <div className="flex-1 relative">
                     <input type="number" placeholder={weightUnit} value={set.weight} onChange={(e) => handleSetChange(index, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
                     <button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                     </button>
                 </div>
+
+                {/* REPS INPUT WRAPPER */}
                 <div className="flex-1">
                     <input type="number" placeholder="reps" value={set.reps} onChange={(e) => handleSetChange(index, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
                 </div>
+
                 <button onClick={() => handleRemoveSet(index)} className="text-red-500 px-2">✕</button>
               </div>
             ))}
