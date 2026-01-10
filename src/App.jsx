@@ -152,16 +152,14 @@ export default function App() {
 
         {view === 'daily' && <DailyView />}
 
-        {view === 'history' && (
-          isResuming ? <ReconnectLoader /> : <HistoryView key={`history-${refreshKey}`} />
-        )}
+        {view === 'history' && <HistoryView />}
 
         {view === 'trends' && <TrendsView />}
 
         {view === 'log' && <WorkoutLogger />}
 
         {view === 'settings' && <SettingsView onNavigate={setView} />}
-        
+
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />}
 
       </div>

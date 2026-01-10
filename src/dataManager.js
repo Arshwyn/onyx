@@ -120,6 +120,19 @@ export const updateLog = async (log) => {
     return data;
 };
 
+export const getLogsRange = async (startDate, endDate) => {
+    let query = supabase.from('workout_logs').select('*');
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    
+    // Default sort if not handling in UI
+    query = query.order('date', { ascending: false });
+
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
+};
+
 // --- 4. BODY WEIGHT ---
 export const getBodyWeights = async () => {
     const { data, error } = await supabase.from('body_weights').select('*');
@@ -182,6 +195,18 @@ export const updateCardioLog = async (log) => {
         .select();
     if (error) console.error(error);
     return await getCardioLogs();
+};
+
+export const getCardioLogsRange = async (startDate, endDate) => {
+    let query = supabase.from('cardio_logs').select('*');
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    
+    query = query.order('date', { ascending: false });
+
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
 };
 
 export const getCircumferences = async () => {

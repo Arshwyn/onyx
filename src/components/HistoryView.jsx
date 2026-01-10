@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getRecentLogs, getRecentCardioLogs, getExercises, deleteLog, updateLog, deleteCardioLog, updateCardioLog      
+  getLogsRange, getCardioLogsRange, getExercises, deleteLog, updateLog, deleteCardioLog, updateCardioLog      
 } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
 
@@ -11,6 +11,15 @@ export default function HistoryView() {
   const [weightUnit, setWeightUnit] = useState('lbs'); 
   const [distUnit, setDistUnit] = useState('mi'); 
 
+  // Helper: Get Today's Date in Local Time (YYYY-MM-DD)
+  const getTodayDate = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Data
   const [combinedHistory, setCombinedHistory] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -18,10 +27,13 @@ export default function HistoryView() {
   const [editingLog, setEditingLog] = useState(null); 
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false });
 
+  // Filter State - Default to Today
+  const [filterStart, setFilterStart] = useState(getTodayDate());
+  const [filterEnd, setFilterEnd] = useState(getTodayDate());
+
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
   useEffect(() => {
-    loadData();
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
         setDistUnit((localStorage.getItem('onyx_unit_distance') || 'mi').toLowerCase()); 
@@ -31,33 +43,42 @@ export default function HistoryView() {
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
+  // Reload data whenever filters change
+  useEffect(() => {
+    loadData();
+  }, [filterStart, filterEnd]);
+
   const openConfirm = (title, message, onConfirm, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
 
   const loadData = async () => {
     setLoading(true);
-    // OPTIMIZED: Use 'getRecent...' instead of 'get...' to fetch only last 50
-    const [loadedLogs, loadedCardio, loadedExercises] = await Promise.all([
-      getRecentLogs(50), 
-      getRecentCardioLogs(50), 
-      getExercises()
-    ]);
-    
-    const map = {};
-    loadedExercises.forEach(ex => map[ex.id] = ex.name);
-    
-    const liftingItems = loadedLogs.map(log => ({ ...log, dataType: 'lift' }));
-    const cardioItems = loadedCardio.map(log => ({ ...log, dataType: 'cardio' }));
-    
-    const allItems = [...liftingItems, ...cardioItems];
-    allItems.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    setCombinedHistory(allItems);
-    setExercises(loadedExercises);
-    setExerciseMap(map);
-    setLoading(false);
+    try {
+        // Fetch logs only for the selected range (defaults to today)
+        const [loadedLogs, loadedCardio, loadedExercises] = await Promise.all([
+          getLogsRange(filterStart, filterEnd), 
+          getCardioLogsRange(filterStart, filterEnd), 
+          getExercises()
+        ]);
+        
+        const map = {};
+        loadedExercises.forEach(ex => map[ex.id] = ex.name);
+        
+        const liftingItems = loadedLogs.map(log => ({ ...log, dataType: 'lift' }));
+        const cardioItems = loadedCardio.map(log => ({ ...log, dataType: 'cardio' }));
+        
+        const allItems = [...liftingItems, ...cardioItems];
+        allItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        setCombinedHistory(allItems);
+        setExercises(loadedExercises);
+        setExerciseMap(map);
+    } catch (error) {
+        console.error("Failed to load history:", error);
+    } finally {
+        setLoading(false);
+    }
   };
 
-  // ... (Rest of component remains largely the same, logic for delete/edit needs no change) ...
   const handleDelete = (item) => {
     const confirmMsg = item.dataType === 'lift' ? "Delete this workout?" : "Delete this cardio session?"; 
     openConfirm("Delete Entry?", confirmMsg, async () => {
@@ -100,70 +121,97 @@ export default function HistoryView() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'onyx_history.csv'; a.click();
+    a.href = url; a.download = `onyx_history_${filterStart || 'start'}_to_${filterEnd || 'end'}.csv`; a.click();
   };
 
-  if (loading) return <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading History...</div>;
+  // Helper to clear filters (Show All History)
+  const clearFilters = () => {
+    setFilterStart('');
+    setFilterEnd('');
+  };
 
   return (
     <div className="w-full max-w-md mx-auto text-white pb-10 overflow-x-hidden">
       <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
 
-      <div className="flex justify-between items-center mb-6 px-1">
-        <h2 className="text-xl font-bold text-gray-300">History</h2>
-        <button onClick={downloadCSV} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded border border-zinc-700 transition">Export CSV</button>
-      </div>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4 px-1">
+            <h2 className="text-xl font-bold text-gray-300">History</h2>
+            <button onClick={downloadCSV} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded border border-zinc-700 transition">Export CSV</button>
+        </div>
 
-      <div className="space-y-4">
-        {combinedHistory.map((item) => {
-          if (item.dataType === 'cardio') {
-            return (
-              <div key={`c-${item.id}`} className="bg-zinc-900/80 rounded border border-blue-900/30 overflow-hidden relative group">
-                <div className="p-3 flex justify-between items-center">
-                  <div className="min-w-0 flex-1">
-                     <span className="text-blue-400 font-bold block truncate">{item.type}</span>
-                     <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
-                  </div>
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                    <div className="text-right">
-                        <span className="block text-white font-bold">{item.duration} <span className="text-xs text-zinc-500 font-normal">min</span></span>
-                        {item.distance && <span className="block text-xs text-zinc-400">{item.distance} {distUnit}</span>}
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => startEditing(item)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition border border-zinc-700">Edit</button>
-                        <button onClick={() => handleDelete(item)} className="text-xs bg-red-900/20 hover:bg-red-900/40 text-red-400 px-2 py-1 rounded border border-red-900/50 transition">Del</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div key={`l-${item.id}`} className="bg-zinc-900 rounded border border-zinc-800 overflow-hidden relative group">
-              <div className="bg-zinc-800/50 p-3 flex justify-between items-center">
-                <div className="min-w-0 flex-1 pr-2">
-                    <span className="font-bold text-gray-200 block truncate">{exerciseMap[item.exerciseId || item.exercise_id] || 'Unknown Exercise'}</span>
-                    <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                    <button onClick={() => startEditing(item)} className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded transition">Edit</button>
-                    <button onClick={() => handleDelete(item)} className="text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-900/50 transition">Del</button>
-                </div>
-              </div>
-              <div className="p-3">
-                {(item.sets || []).map((set, idx) => (
-                  <div key={idx} className="grid grid-cols-3 text-sm text-gray-300 py-1 border-b border-zinc-800/50 last:border-0">
-                    <span className="text-zinc-500 text-xs mt-1">SET {idx + 1}</span>
-                    <span>{set.weight} <span className="text-xs text-zinc-600">{weightUnit}</span></span>
-                    <span>{set.reps} <span className="text-xs text-zinc-600">reps</span></span>
-                  </div>
-                ))}
-              </div>
+        {/* Filter UI */}
+        <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-lg flex gap-3 items-end">
+            <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Start Date</label>
+                <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-xs" />
             </div>
-          );
-        })}
+            <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">End Date</label>
+                <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-xs" />
+            </div>
+             {(filterStart || filterEnd) && (
+                <button onClick={clearFilters} className="bg-zinc-800 text-zinc-400 hover:text-white px-3 py-2 rounded text-xs h-[34px] border border-zinc-700">Clear</button>
+            )}
+        </div>
       </div>
+
+      {loading ? (
+          <div className="text-center pt-20 text-zinc-500 animate-pulse">Loading Logs...</div>
+      ) : (
+          <div className="space-y-4">
+            {combinedHistory.length === 0 && <div className="text-center text-zinc-500 text-sm py-10">No logs found for this period.</div>}
+
+            {combinedHistory.map((item) => {
+              if (item.dataType === 'cardio') {
+                return (
+                  <div key={`c-${item.id}`} className="bg-zinc-900/80 rounded border border-blue-900/30 overflow-hidden relative group">
+                    <div className="p-3 flex justify-between items-center">
+                      <div className="min-w-0 flex-1">
+                         <span className="text-blue-400 font-bold block truncate">{item.type}</span>
+                         <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                            <span className="block text-white font-bold">{item.duration} <span className="text-xs text-zinc-500 font-normal">min</span></span>
+                            {item.distance && <span className="block text-xs text-zinc-400">{item.distance} {distUnit}</span>}
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => startEditing(item)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition border border-zinc-700">Edit</button>
+                            <button onClick={() => handleDelete(item)} className="text-xs bg-red-900/20 hover:bg-red-900/40 text-red-400 px-2 py-1 rounded border border-red-900/50 transition">Del</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={`l-${item.id}`} className="bg-zinc-900 rounded border border-zinc-800 overflow-hidden relative group">
+                  <div className="bg-zinc-800/50 p-3 flex justify-between items-center">
+                    <div className="min-w-0 flex-1 pr-2">
+                        <span className="font-bold text-gray-200 block truncate">{exerciseMap[item.exerciseId || item.exercise_id] || 'Unknown Exercise'}</span>
+                        <span className="text-xs text-zinc-500 font-mono">{item.date}</span>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                        <button onClick={() => startEditing(item)} className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded transition">Edit</button>
+                        <button onClick={() => handleDelete(item)} className="text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-900/50 transition">Del</button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    {(item.sets || []).map((set, idx) => (
+                      <div key={idx} className="grid grid-cols-3 text-sm text-gray-300 py-1 border-b border-zinc-800/50 last:border-0">
+                        <span className="text-zinc-500 text-xs mt-1">SET {idx + 1}</span>
+                        <span>{set.weight} <span className="text-xs text-zinc-600">{weightUnit}</span></span>
+                        <span>{set.reps} <span className="text-xs text-zinc-600">reps</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      )}
 
       {editingLog && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
