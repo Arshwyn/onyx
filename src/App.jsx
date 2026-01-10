@@ -17,11 +17,16 @@ export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('onyx_view') || 'daily');
   
   const [showTimer, setShowTimer] = useState(true);
+  
+  // refreshKey is used to force-remount components to "resubscribe" to data
+  const [refreshKey, setRefreshKey] = useState(Date.now());
 
+  // 1. Persist View
   useEffect(() => {
     localStorage.setItem('onyx_view', view);
   }, [view]);
 
+  // 2. Settings Listener
   useEffect(() => {
     const checkTimerSetting = () => {
       const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
@@ -32,7 +37,9 @@ export default function App() {
     return () => window.removeEventListener('storage', checkTimerSetting);
   }, []);
 
+  // 3. Auth & Connection Management
   useEffect(() => {
+    // Initial Session Load
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -40,12 +47,59 @@ export default function App() {
     };
     initSession();
 
+    // Auth State Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session) await syncSettings();
     });
 
-    return () => subscription.unsubscribe();
+    // --- RESUME / RE-SYNC LOGIC ---
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log("App resumed. Checking connection...");
+
+        // Check if we have a current session in state
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+        if (currentSession) {
+            console.log("Session exists. Force unsubscribing channels...");
+            
+            // 1. FORCE UNSUBSCRIBE
+            // This kills any zombie WebSockets or Realtime connections that hung while backgrounded
+            await supabase.removeAllChannels();
+
+            // 2. REFRESH AUTH
+            // Force a handshake with the server to ensure the socket is alive
+            const { error } = await supabase.auth.getUser();
+            
+            if (!error) {
+                console.log("Connection healthy. Resubscribing/Reloading views...");
+                setSession(currentSession); // Ensure state is fresh
+                
+                // 3. RESUBSCRIBE (Force Remount)
+                // Updating this key destroys the Daily/History components and mounts them fresh,
+                // triggering their useEffects to fetch new data on a clean connection.
+                setRefreshKey(Date.now());
+                
+                // Re-sync local settings
+                await syncSettings();
+                const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
+                setShowTimer(!isHidden);
+            } else {
+                console.log("Session invalid on resume", error);
+            }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange); // Fallback for some browsers
+
+    return () => {
+        subscription.unsubscribe();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, []);
 
   const syncSettings = async () => {
@@ -63,7 +117,6 @@ export default function App() {
       const confettiEnabled = dbSettings.show_confetti !== false; 
       localStorage.setItem('onyx_show_confetti', confettiEnabled);
 
-      // NEW: Sync Dashboard Visibility Settings
       const showBW = dbSettings.show_body_weight !== false;
       const showMeas = dbSettings.show_measurements !== false;
       localStorage.setItem('onyx_show_bw', showBW);
@@ -78,8 +131,8 @@ export default function App() {
         timer_increments: [30, 60, 90],
         show_timer: true,
         show_confetti: true,
-        show_body_weight: true, // Default True
-        show_measurements: true // Default True
+        show_body_weight: true,
+        show_measurements: true
       });
     }
   };
@@ -89,9 +142,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
-        {view === 'daily' && <DailyView />}
-        {view === 'history' && <HistoryView />}
-        {view === 'trends' && <TrendsView />}
+        {/* The 'key' prop forces a complete unmount/remount on resume */}
+        {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
+        {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
+        {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
+        
+        {/* We do NOT key the Logger to prevent losing typed input if you tab out quickly */}
         {view === 'log' && <WorkoutLogger />}
         
         {view === 'settings' && <SettingsView onNavigate={setView} />}
@@ -119,7 +175,7 @@ function NavButton({ active, onClick, icon, label }) {
         plus: (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
         clock: (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
         chart: (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>),
-        settings: (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>)
+        settings: (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>)
     };
 
     return (

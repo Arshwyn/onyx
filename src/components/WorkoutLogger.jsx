@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import confetti from 'canvas-confetti'; // Import Confetti
-import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager'; // Added getLogs
+import confetti from 'canvas-confetti';
+import { getExercises, addLog, addCardioLog, getLogs } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
 
@@ -17,7 +17,8 @@ export default function WorkoutLogger() {
 
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
-  const [personalRecords, setPersonalRecords] = useState({}); // Store PRs
+  const [personalRecords, setPersonalRecords] = useState({}); 
+  
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
 
@@ -28,31 +29,32 @@ export default function WorkoutLogger() {
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
 
   useEffect(() => {
-    const fetchData = async () => {
-      // Fetch Exercises AND Logs to calculate PRs
-      const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
-      setExercises(loadedEx);
-      if (loadedEx.length > 0) setExerciseId(loadedEx[0].id);
+    const loadData = async () => {
+      try {
+          const [loadedEx, allLogs] = await Promise.all([getExercises(), getLogs()]);
+          setExercises(loadedEx);
+          if (loadedEx.length > 0) setExerciseId(prev => prev || loadedEx[0].id);
 
-      // Calculate PR map
-      const prMap = {};
-      loadedEx.forEach(ex => {
-        const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
-        let max = 0;
-        pastLogs.forEach(log => {
-            if (log.sets) {
-                log.sets.forEach(s => {
-                    const w = parseFloat(s.weight);
-                    if (w > max) max = w;
-                });
-            }
-        });
-        prMap[ex.id] = max;
-      });
-      setPersonalRecords(prMap);
+          const prMap = {};
+          loadedEx.forEach(ex => {
+            const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+            let max = 0;
+            pastLogs.forEach(log => {
+                if (log.sets) {
+                    log.sets.forEach(s => {
+                        const w = parseFloat(s.weight);
+                        if (w > max) max = w;
+                    });
+                }
+            });
+            prMap[ex.id] = max;
+          });
+          setPersonalRecords(prMap);
+      } catch (error) {
+          console.error("Error loading logger data", error);
+      }
     };
-    
-    fetchData();
+    loadData();
 
     const loadSettings = () => {
         setWeightUnit((localStorage.getItem('onyx_unit_weight') || 'lbs').toLowerCase());
@@ -91,14 +93,11 @@ export default function WorkoutLogger() {
     
     setIsSubmitting(true);
     try {
-      // 1. Check for PR
       const currentMax = Math.max(...validSets.map(s => parseFloat(s.weight) || 0));
       const oldMax = personalRecords[exerciseId] || 0;
 
       if (currentMax > oldMax && oldMax > 0) {
-        // CHECK SETTING BEFORE FIRING
         const confettiEnabled = localStorage.getItem('onyx_show_confetti') !== 'false';
-        
         if (confettiEnabled) {
             confetti({
                 particleCount: 150,
@@ -109,10 +108,8 @@ export default function WorkoutLogger() {
         }
       }
 
-      // 2. Save
       await addLog(date, exerciseId, validSets);
       
-      // 3. Update local PR state (so next log is accurate without reload)
       if (currentMax > oldMax) {
         setPersonalRecords(prev => ({ ...prev, [exerciseId]: currentMax }));
       }
@@ -135,13 +132,7 @@ export default function WorkoutLogger() {
     <div className="w-full max-w-md mx-auto text-white overflow-x-hidden">
       <ConfirmModal isOpen={modalConfig.isOpen} title={modalConfig.title} message={modalConfig.message} onConfirm={modalConfig.onConfirm} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} isDestructive={modalConfig.isDestructive} />
       
-      {/* PLATE CALCULATOR */}
-      <PlateCalculator 
-        isOpen={showCalc} 
-        onClose={() => setShowCalc(false)} 
-        initialWeight={calcInitWeight} 
-        unit={weightUnit} 
-      />
+      <PlateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} initialWeight={calcInitWeight} unit={weightUnit} />
 
       <h2 className="text-xl font-bold mb-4 text-gray-300">Quick Log</h2>
       <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-6">
@@ -165,20 +156,13 @@ export default function WorkoutLogger() {
             <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
-                
-                {/* WEIGHT INPUT WRAPPER */}
                 <div className="flex-1 relative">
                     <input type="number" placeholder={weightUnit} value={set.weight} onChange={(e) => handleSetChange(index, 'weight', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
                     <button onClick={() => openCalculator(set.weight)} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 p-1">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                     </button>
                 </div>
-
-                {/* REPS INPUT WRAPPER */}
-                <div className="flex-1">
-                    <input type="number" placeholder="reps" value={set.reps} onChange={(e) => handleSetChange(index, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" />
-                </div>
-
+                <div className="flex-1"><input type="number" placeholder="reps" value={set.reps} onChange={(e) => handleSetChange(index, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white" /></div>
                 <button onClick={() => handleRemoveSet(index)} className="text-red-500 px-2">✕</button>
               </div>
             ))}
