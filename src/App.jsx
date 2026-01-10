@@ -46,50 +46,23 @@ export default function App() {
       if (session) await syncSettings();
     });
 
-    // --- ADVANCED RECONNECTION LISTENER ---
+    // --- RESUME LISTENER (FIXED) ---
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        console.log("App resumed - Checking connection health...");
+        console.log("App resumed");
         
-        // 1. Force UI to reset immediately (shows loading spinners instead of stale data)
+        // 1. IMMEDIATE UI RESET: Don't await anything here! 
+        // This forces the Daily/History views to remount and start fresh requests immediately.
         setRefreshKey(Date.now());
 
-        // 2. CONNECTION HEALTH CHECK
-        // We try to fetch the current user. If this hangs or fails, the connection is dead.
-        const healthCheck = new Promise(async (resolve, reject) => {
-            const timeout = setTimeout(() => reject('Timeout'), 3000); // 3s Timeout
-            try {
-                const { error } = await supabase.from('user_settings').select('id').limit(1).maybeSingle();
-                clearTimeout(timeout);
-                if (error) reject(error);
-                else resolve('OK');
-            } catch (e) {
-                clearTimeout(timeout);
-                reject(e);
+        // 2. Wake up session in background (don't block the UI update)
+        supabase.auth.getSession().then(({ data }) => {
+            if (data.session) {
+                setSession(data.session);
+                syncSettings();
             }
         });
-
-        try {
-            await healthCheck;
-            console.log("Connection is healthy.");
-            // Just refresh session to be safe
-            const { data } = await supabase.auth.getSession();
-            if (data?.session) setSession(data.session);
-        } catch (e) {
-            console.warn("Connection dead or zombie. Forcing restart.", e);
-            // 3. FORCE RECONNECT
-            // We sign out locally (not globally) to clear the client state, then recover.
-            // Note: In Supabase JS, just calling getSession() again usually fixes it,
-            // but if it's really stuck, we might need to rely on the 'refreshKey' to rebuild the views.
-            const { data } = await supabase.auth.getSession();
-            if (data?.session) {
-                setSession(data.session);
-                // Re-run settings sync which also validates DB access
-                await syncSettings();
-            }
-        }
         
-        // Restore local UI settings
         const isHidden = localStorage.getItem('onyx_show_timer') === 'false';
         setShowTimer(!isHidden);
       }
@@ -145,12 +118,10 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-blue-500/30">
       <div className="p-4 pb-24">
-        {/* Pass refreshKey to force remount on resume */}
         {view === 'daily' && <DailyView key={`daily-${refreshKey}`} />}
         {view === 'history' && <HistoryView key={`history-${refreshKey}`} />}
         {view === 'trends' && <TrendsView key={`trends-${refreshKey}`} />}
         
-        {/* Do not key Logger/Settings (preserve input) */}
         {view === 'log' && <WorkoutLogger />}
         {view === 'settings' && <SettingsView onNavigate={setView} />}
         {view === 'routine_manager' && <RoutineManager onBack={() => setView('settings')} />} 
