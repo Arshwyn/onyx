@@ -93,8 +93,6 @@ export default function TrendsView() {
 
   const calculateExerciseTrend = async (exId) => {
     const allLogs = await getLogs();
-    
-    // UPDATED: Filter logic to exclude skipped logs
     const relevantLogs = allLogs.filter(l => 
         String(l.exercise_id || l.exerciseId) === String(exId) && 
         !(l.sets && l.sets.length > 0 && l.sets[0].isSkipped)
@@ -173,31 +171,72 @@ export default function TrendsView() {
 
     const width = 100;
     const height = 50;
-    const values = dataPoints.map(p => p.weight);
-    const minVal = Math.min(...values) * 0.95;
-    const maxVal = Math.max(...values) * 1.05;
-    const range = maxVal - minVal || 1;
+    const values = dataPoints.map(p => parseFloat(p.weight));
+    
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    
+    const rawRange = maxVal - minVal;
+    const padding = rawRange === 0 ? (maxVal * 0.1 || 10) : rawRange * 0.15;
+    
+    const domainMin = minVal - padding;
+    const domainMax = maxVal + padding;
+    const range = domainMax - domainMin;
+
+    const getY = (val) => height - ((val - domainMin) / range) * height;
+    const getX = (index) => (index / (dataPoints.length - 1)) * width;
 
     const pathD = dataPoints.map((point, index) => {
-      const x = (index / (dataPoints.length - 1)) * width;
-      const y = height - ((point.weight - minVal) / range) * height;
-      return `${x},${y}`;
+      return `${getX(index)},${getY(parseFloat(point.weight))}`;
     }).join(' ');
 
     return (
       <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6 relative">
-        <h3 className="text-xs text-zinc-500 font-bold uppercase mb-4">
-          Progress ({dataPoints.length} entries)
-        </h3>
-        <svg viewBox="0 0 100 50" className="w-full h-32 stroke-blue-400 stroke-2 fill-none overflow-visible">
-          <polyline points={pathD} vectorEffect="non-scaling-stroke" />
-          {dataPoints.map((p, i) => {
-            const x = (i / (dataPoints.length - 1)) * width;
-            const y = height - ((p.weight - minVal) / range) * height;
-            return <circle cx={x} cy={y} r="1.5" className="fill-black stroke-white stroke-[0.5]" key={i} />
-          })}
-        </svg>
-        <div className="flex justify-between text-[10px] text-zinc-600 mt-2 font-mono">
+        <div className="flex justify-between items-baseline mb-4">
+            <h3 className="text-xs text-zinc-500 font-bold uppercase">
+            Progress ({dataPoints.length} entries)
+            </h3>
+            <span className="text-[10px] text-green-500 font-mono">
+                {minVal === maxVal ? 'Stable' : (dataPoints[dataPoints.length-1].weight > dataPoints[0].weight ? '▲ Up' : '▼ Down')}
+            </span>
+        </div>
+        
+        <div className="flex gap-3">
+            {/* Y-Axis Labels (UPDATED: toFixed(2) for decimals) */}
+            <div className="flex flex-col justify-between text-[9px] text-zinc-500 font-mono py-1 text-right min-w-[30px] h-32 select-none">
+                <span>{maxVal.toFixed(2)}</span>
+                <span>{((maxVal + minVal) / 2).toFixed(2)}</span>
+                <span>{minVal.toFixed(2)}</span>
+            </div>
+
+            {/* Chart Area */}
+            <div className="flex-1 relative h-32">
+                {/* Horizontal Grid Lines */}
+                <div className="absolute inset-0 flex flex-col justify-between py-2 pointer-events-none opacity-10">
+                    <div className="border-t border-white w-full"></div>
+                    <div className="border-t border-white w-full"></div>
+                    <div className="border-t border-white w-full"></div>
+                </div>
+
+                <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full stroke-blue-400 stroke-2 fill-none overflow-visible">
+                    <polyline points={pathD} vectorEffect="non-scaling-stroke" />
+                    {dataPoints.map((p, i) => (
+                        <circle 
+                            key={i} 
+                            cx={getX(i)} 
+                            cy={getY(parseFloat(p.weight))} 
+                            r="1.5" 
+                            className="fill-zinc-900 stroke-blue-400 stroke-[1] hover:r-3 transition-all cursor-pointer" 
+                            vectorEffect="non-scaling-stroke"
+                        >
+                            <title>{p.date}: {p.weight}</title>
+                        </circle>
+                    ))}
+                </svg>
+            </div>
+        </div>
+
+        <div className="flex justify-between text-[9px] text-zinc-600 mt-2 font-mono pl-[42px]">
           <span>{dataPoints[0].date}</span>
           <span>{dataPoints[dataPoints.length - 1].date}</span>
         </div>
