@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
-  getRoutines, getExercises, addLog, updateLog, getLogs, 
+  getRoutines, getExercises, addLog, updateLog, deleteLog, getLogs, 
   getLogsByDate, getCardioLogsByDate, 
   getBodyWeights, addBodyWeight,              
   getCardioLogs, addCardioLog, deleteCardioLog, 
@@ -46,7 +46,7 @@ export default function DailyView({ refreshTrigger }) {
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   
-  // NEW: State for Skipped Exercises
+  // UPDATED: State for Skipped Exercises (Now derived from DB logs)
   const [skippedIds, setSkippedIds] = useState([]);
   
   // Stats
@@ -130,11 +130,6 @@ export default function DailyView({ refreshTrigger }) {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
-        // Load skipped IDs from local storage (simple persistence for skipping)
-        const skippedKey = `onyx_skipped_${dateStr}`;
-        const savedSkipped = JSON.parse(localStorage.getItem(skippedKey) || '[]');
-        setSkippedIds(savedSkipped);
-
         const [weights, cLogs, daysLogs, routines, allExercises, mData] = await Promise.all([
             getBodyWeights(), 
             getCardioLogsByDate(dateStr), 
@@ -151,8 +146,22 @@ export default function DailyView({ refreshTrigger }) {
         setViewCardioLogs(cLogs);
         setDailyLogs(daysLogs); 
         
-        const doneIds = daysLogs.map(log => String(log.exercise_id || log.exerciseId));
+        // UPDATED: Differentiate between Skipped Logs and Completed Logs
+        const doneIds = [];
+        const skipIds = [];
+        
+        daysLogs.forEach(log => {
+            const strId = String(log.exercise_id || log.exerciseId);
+            // Check for our special "skipped" marker
+            if (log.sets && log.sets.length > 0 && log.sets[0].isSkipped === true) {
+                skipIds.push(strId);
+            } else {
+                doneIds.push(strId);
+            }
+        });
+
         setCompletedIds(doneIds);
+        setSkippedIds(skipIds);
 
         const swapKey = `onyx_swap_${dateStr}`;
         const swappedRoutineId = localStorage.getItem(swapKey);
@@ -184,10 +193,13 @@ export default function DailyView({ refreshTrigger }) {
             setSetInputs(prev => {
                 const newInputs = { ...prev };
                 mergedData.forEach(ex => {
+                    // Only initialize inputs if not already there
                     if (!newInputs[ex.id]) {
-                        if (ex.existingLog) {
+                        // If log exists AND it's not a skipped log, populate values
+                        if (ex.existingLog && !ex.existingLog.sets?.[0]?.isSkipped) {
                             newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
                         } else {
+                            // Otherwise (no log OR skipped log), show empty inputs
                             newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
                         }
                     } 
@@ -220,7 +232,8 @@ export default function DailyView({ refreshTrigger }) {
             pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
             const lastLog = pastLogs[0]; 
             const sets = lastLog.sets || [];
-            if (sets.length > 0) {
+            // Ensure we don't display "skipped" markers as history stats
+            if (sets.length > 0 && !sets[0].isSkipped) {
                 const bestSet = sets.reduce((prev, current) => (Number(current.weight) > Number(prev.weight) ? current : prev), sets[0]);
                 historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
             }
@@ -233,7 +246,7 @@ export default function DailyView({ refreshTrigger }) {
         const exerciseLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
         let maxWeight = 0;
         exerciseLogs.forEach(log => {
-            if(log.sets) {
+            if(log.sets && !log.sets[0]?.isSkipped) {
                 log.sets.forEach(s => {
                     const w = parseFloat(s.weight);
                     if (w > maxWeight) maxWeight = w;
@@ -273,16 +286,13 @@ export default function DailyView({ refreshTrigger }) {
 
   const handleSetChange = (exId, index, field, value) => { setSetInputs(prev => { const currentSets = [...prev[exId]]; currentSets[index] = { ...currentSets[index], [field]: value }; if (index === 0) { for (let i = 1; i < currentSets.length; i++) { currentSets[i] = { ...currentSets[i], [field]: value }; } } return { ...prev, [exId]: currentSets }; }); };
 
-  // NEW: Add a Set
   const handleAddSet = (exId) => {
     setSetInputs(prev => {
         const currentSets = prev[exId] || [];
-        // Optional: Pre-fill with last set's data for convenience? Let's leave empty for now
         return { ...prev, [exId]: [...currentSets, { weight: '', reps: '' }] };
     });
   };
 
-  // NEW: Remove a Set
   const handleRemoveSet = (exId, index) => {
     setSetInputs(prev => {
         const currentSets = [...prev[exId]];
@@ -291,16 +301,37 @@ export default function DailyView({ refreshTrigger }) {
     });
   };
 
-  // NEW: Skip Exercise Logic
-  const handleSkipExercise = (exId) => {
+  // UPDATED: Skip Exercise Logic (Persisted to DB)
+  const handleSkipExercise = async (exId) => {
     const strId = String(exId);
-    const newSkipped = [...skippedIds, strId];
-    setSkippedIds(newSkipped);
-    setExpandedIds(expandedIds.filter(id => id !== strId)); // Collapse it
-    
-    // Save to local storage for simple persistence
     const dateStr = getDateStr(viewDate);
-    localStorage.setItem(`onyx_skipped_${dateStr}`, JSON.stringify(newSkipped));
+    
+    // Find if there is already a log (skipped or completed)
+    const existingLog = dailyLogs.find(l => String(l.exercise_id || l.exerciseId) === strId);
+
+    if (skippedIds.includes(strId)) {
+        // CASE: Already skipped -> User clicked "Skipped" button to un-skip
+        // Action: Delete the skipped log entry
+        if (existingLog) {
+           await deleteLog(existingLog.id);
+        }
+        setSkippedIds(prev => prev.filter(id => id !== strId));
+    } else {
+        // CASE: Not skipped -> User clicked "Skip"
+        // Action: Create/Update log with { isSkipped: true } marker
+        const skipMarker = [{ isSkipped: true }];
+        
+        if (existingLog) {
+            await updateLog({ ...existingLog, sets: skipMarker });
+        } else {
+            await addLog(dateStr, exId, skipMarker);
+        }
+        // Collapse UI
+        setExpandedIds(expandedIds.filter(id => id !== strId));
+    }
+
+    // Refresh data to ensure IDs and UI are synced
+    loadDailyView(viewDate, false);
   };
 
   const handleLogExercise = async (exId) => {
@@ -312,12 +343,8 @@ export default function DailyView({ refreshTrigger }) {
     const dateStr = getDateStr(viewDate);
     const strId = String(exId);
 
-    // If logging, remove from skipped list if it was there
-    if (skippedIds.includes(strId)) {
-        const newSkipped = skippedIds.filter(id => id !== strId);
-        setSkippedIds(newSkipped);
-        localStorage.setItem(`onyx_skipped_${dateStr}`, JSON.stringify(newSkipped));
-    }
+    // If it was skipped, logging it effectively "un-skips" it because we overwrite the log
+    // We don't need explicit delete logic here because updateLog will replace the sets.
 
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
@@ -389,10 +416,10 @@ export default function DailyView({ refreshTrigger }) {
         <div className="space-y-4 mb-8">{exercises.map((ex, idx) => { 
             const strId = String(ex.id); 
             const isComplete = completedIds.includes(strId); 
-            const isSkipped = skippedIds.includes(strId); // Check Skip Status
+            const isSkipped = skippedIds.includes(strId); 
             const isExpanded = expandedIds.includes(strId); 
             
-            // Should show body if expanded OR if not complete AND not skipped
+            // Show body if expanded OR if (not complete AND not skipped)
             const showBody = isExpanded || (!isComplete && !isSkipped); 
             
             const lastStats = lastPerformances[ex.id]; 
@@ -402,7 +429,7 @@ export default function DailyView({ refreshTrigger }) {
             const prevMax = personalRecords[ex.id] || 0; 
             const isPR = maxLifted > prevMax && prevMax > 0 && isComplete; 
 
-            // Conditional Border Styling
+            // Conditional Styling
             let borderClass = 'border-zinc-800';
             let bgClass = 'bg-zinc-900';
             
@@ -453,7 +480,7 @@ export default function DailyView({ refreshTrigger }) {
                                     <div className="w-8 text-center">Set</div>
                                     <div className="flex-1 text-center">{weightUnit.toLowerCase()}</div>
                                     <div className="flex-1 text-center">Reps</div>
-                                    <div className="w-6"></div> {/* Spacer for delete button */}
+                                    <div className="w-6"></div> 
                                 </div>
                                 
                                 {setInputs[ex.id]?.map((set, idx) => (
@@ -466,12 +493,10 @@ export default function DailyView({ refreshTrigger }) {
                                         <div className="flex-1">
                                             <input type="number" placeholder="-" value={set.reps} onChange={(e) => handleSetChange(ex.id, idx, 'reps', e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white text-center outline-none focus:border-blue-500 transition font-mono" />
                                         </div>
-                                        {/* Remove Set Button */}
                                         <button onClick={() => handleRemoveSet(ex.id, idx)} className="w-6 text-zinc-600 hover:text-red-500 text-lg leading-none">×</button>
                                     </div>
                                 ))}
 
-                                {/* Add Set Button */}
                                 <button onClick={() => handleAddSet(ex.id)} className="w-full text-center py-2 text-xs font-bold text-blue-500/70 hover:text-blue-400 uppercase tracking-widest border border-dashed border-blue-900/30 rounded hover:bg-blue-900/10 transition">
                                     + Add Set
                                 </button>
@@ -480,7 +505,7 @@ export default function DailyView({ refreshTrigger }) {
                             {/* Footer Actions */}
                             <div className="p-3 bg-zinc-800/20 border-t border-zinc-800 flex gap-3">
                                 <button onClick={() => handleSkipExercise(ex.id)} className="flex-1 bg-zinc-800 text-zinc-400 font-bold py-3 rounded hover:bg-zinc-700 transition tracking-widest text-xs uppercase border border-zinc-700">
-                                    {isSkipped ? 'Skipped' : 'Skip'}
+                                    {isSkipped ? 'Un-Skip' : 'Skip'}
                                 </button>
                                 <button onClick={() => handleLogExercise(ex.id)} className="flex-[2] bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition tracking-widest text-xs uppercase">
                                     {isComplete ? 'Update Log' : 'Complete Exercise'}

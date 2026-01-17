@@ -63,7 +63,11 @@ export default function HistoryView() {
         const map = {};
         loadedExercises.forEach(ex => map[ex.id] = ex.name);
         
-        const liftingItems = loadedLogs.map(log => ({ ...log, dataType: 'lift' }));
+        // UPDATED: Filter out logs that are marked as "skipped"
+        const liftingItems = loadedLogs
+            .filter(log => !(log.sets && log.sets.length > 0 && log.sets[0].isSkipped))
+            .map(log => ({ ...log, dataType: 'lift' }));
+
         const cardioItems = loadedCardio.map(log => ({ ...log, dataType: 'cardio' }));
         
         const allItems = [...liftingItems, ...cardioItems];

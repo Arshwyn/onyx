@@ -93,7 +93,12 @@ export default function TrendsView() {
 
   const calculateExerciseTrend = async (exId) => {
     const allLogs = await getLogs();
-    const relevantLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(exId));
+    
+    // UPDATED: Filter logic to exclude skipped logs
+    const relevantLogs = allLogs.filter(l => 
+        String(l.exercise_id || l.exerciseId) === String(exId) && 
+        !(l.sets && l.sets.length > 0 && l.sets[0].isSkipped)
+    );
 
     const points = relevantLogs.map(log => {
       const sets = log.sets || [];
@@ -122,7 +127,6 @@ export default function TrendsView() {
   };
 
   const handleDeleteMeasurement = (id) => {
-    // USE CUSTOM MODAL
     openConfirm(
       "Delete Measurement?",
       "Are you sure you want to delete this measurement?",
@@ -145,7 +149,6 @@ export default function TrendsView() {
   };
 
   const handleDeleteWeight = (id) => {
-    // USE CUSTOM MODAL
     openConfirm(
       "Delete Weight Entry?",
       "Are you sure you want to delete this weight log?",
@@ -207,7 +210,6 @@ export default function TrendsView() {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden">
 
-      {/* MOUNT MODAL */}
       <ConfirmModal
         isOpen={modalConfig.isOpen}
         title={modalConfig.title}
