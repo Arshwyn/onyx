@@ -8,9 +8,8 @@ import {
 } from '../dataManager'; 
 import ConfirmModal from './ConfirmModal';
 
-// UPDATED: Destructure resetTrigger from props
 export default function SettingsView({ onNavigate, resetTrigger }) {
-  const [viewMode, setViewMode] = useState('hub'); // hub, custom_exercises, display, units
+  const [viewMode, setViewMode] = useState('hub'); 
   const [userEmail, setUserEmail] = useState('');
 
   // --- GLOBAL SETTINGS STATE ---
@@ -24,7 +23,6 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
   const [showBW, setShowBW] = useState(true);
   const [showMeas, setShowMeas] = useState(true);
 
-  // NEW: Watch for reset signal from App.jsx
   useEffect(() => {
     if (resetTrigger > 0) {
         setViewMode('hub');
@@ -32,7 +30,6 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
   }, [resetTrigger]);
 
   useEffect(() => {
-    // Load local settings on mount
     setWeightUnit(localStorage.getItem('onyx_unit_weight') || 'lbs');
     setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
     setDistUnit(localStorage.getItem('onyx_unit_distance') || 'mi');
@@ -59,10 +56,9 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
     });
   }, []);
 
-  // --- HANDLERS ---
   const handleUpdateSetting = (key, value, storageKey, dbKey) => {
     localStorage.setItem(storageKey, value);
-    window.dispatchEvent(new Event('storage')); // Notify other components
+    window.dispatchEvent(new Event('storage')); 
     updateUserSettings({ [dbKey]: value });
   };
 
@@ -76,7 +72,6 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
   return (
     <div className="w-full max-w-md mx-auto text-white pb-20 overflow-x-hidden animate-fade-in">
       
-      {/* Header */}
       <div className="mb-6 border-b border-zinc-800 pb-4">
         {viewMode === 'hub' ? (
           <>
@@ -94,7 +89,6 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
         )}
       </div>
 
-      {/* VIEW ROUTER */}
       {viewMode === 'hub' && (
         <SettingsHub 
           onNavigate={onNavigate} 
@@ -102,9 +96,7 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
         />
       )}
 
-      {viewMode === 'custom_exercises' && (
-        <CustomExercisesSettings />
-      )}
+      {viewMode === 'custom_exercises' && <CustomExercisesSettings />}
 
       {viewMode === 'display' && (
         <DisplaySettings 
@@ -125,11 +117,13 @@ export default function SettingsView({ onNavigate, resetTrigger }) {
         />
       )}
 
+      {/* NEW: Account View */}
+      {viewMode === 'account' && <AccountSettings userEmail={userEmail} />}
+
     </div>
   );
 }
 
-// ... (Rest of file - SettingsHub, CustomExercisesSettings, etc. - remains exactly the same)
 function SettingsHub({ onNavigate, onChangeView }) {
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -137,46 +131,151 @@ function SettingsHub({ onNavigate, onChangeView }) {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      
-      {/* 1. Routine Schedule */}
       <HubButton 
         label="Routine Schedule" 
         subLabel="Edit your weekly workout plan"
         icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>}
         onClick={() => onNavigate('routine_manager')}
       />
-
-      {/* 2. Custom Exercises */}
       <HubButton 
         label="Custom Exercises" 
         subLabel="Manage your exercise library"
         icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>}
         onClick={() => onChangeView('custom_exercises')}
       />
-
-      {/* 3. Display Settings */}
       <HubButton 
         label="Display Settings" 
         subLabel="Timer and UI toggles"
         icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>}
         onClick={() => onChangeView('display')}
       />
-
-      {/* 4. Units & Preferences */}
       <HubButton 
         label="Units & Preferences" 
         subLabel="Set measurement defaults"
         icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"></path></svg>}
         onClick={() => onChangeView('units')}
       />
+      {/* Account Security Button */}
+      <HubButton 
+        label="Account Security" 
+        subLabel="Update email or password"
+        icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>}
+        onClick={() => onChangeView('account')}
+      />
 
-      {/* Sign Out */}
       <div className="pt-6 mt-6 border-t border-zinc-800">
         <button onClick={handleLogout} className="w-full py-4 rounded-lg border border-red-900/30 text-red-500 bg-red-900/10 font-bold uppercase tracking-widest text-xs hover:bg-red-900/20 transition">Sign Out</button>
         <div className="text-center mt-4"><span className="text-[10px] text-zinc-600">Onyx v1.3.1</span></div>
       </div>
     </div>
   );
+}
+
+// UPDATED: Account Settings with Email Update
+function AccountSettings({ userEmail }) {
+    const [newEmail, setNewEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [msg, setMsg] = useState('');
+
+    const handleUpdate = async () => {
+        const attributes = {};
+        
+        // 1. Check if Password is being updated
+        if (password) {
+            if (password.length < 6) {
+                setMsg('Error: Password must be at least 6 characters.');
+                return;
+            }
+            if (password !== confirm) {
+                setMsg('Error: Passwords do not match.');
+                return;
+            }
+            attributes.password = password;
+        }
+
+        // 2. Check if Email is being updated
+        if (newEmail && newEmail !== userEmail) {
+             attributes.email = newEmail;
+        }
+
+        // 3. Stop if nothing is being changed
+        if (Object.keys(attributes).length === 0) {
+            setMsg('Error: No changes entered.');
+            return;
+        }
+
+        setLoading(true);
+        setMsg('');
+        
+        const { error } = await supabase.auth.updateUser(attributes);
+        
+        if (error) {
+            setMsg('Error: ' + error.message);
+        } else {
+            let successMsg = 'Success! ';
+            if (attributes.password) successMsg += 'Password updated. ';
+            if (attributes.email) successMsg += 'Check both emails (old & new) to confirm the change.';
+            
+            setMsg(successMsg);
+            
+            // Clear inputs on success
+            setPassword('');
+            setConfirm('');
+            setNewEmail('');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="animate-fade-in">
+            <h2 className="text-xl font-bold text-gray-300 mb-4">Account Security</h2>
+            <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800">
+                
+                {/* Email Section */}
+                <div className="mb-6">
+                    <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Current Email</label>
+                    <div className="text-white text-sm font-mono bg-black p-2 rounded border border-zinc-700 opacity-50 cursor-not-allowed mb-2">
+                        {userEmail || 'Loading...'}
+                    </div>
+                    
+                    <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">New Email</label>
+                    <input 
+                        type="email" 
+                        value={newEmail} 
+                        onChange={e => setNewEmail(e.target.value)} 
+                        className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition placeholder-zinc-700" 
+                        placeholder={userEmail}
+                    />
+                </div>
+
+                <div className="w-full h-px bg-zinc-800 mb-6"></div>
+
+                {/* Password Section */}
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">New Password</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Confirm Password</label>
+                        <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} className="w-full bg-black border border-zinc-700 rounded p-2 text-white outline-none focus:border-blue-500 transition" />
+                    </div>
+                    
+                    <button onClick={handleUpdate} disabled={loading} className="w-full bg-white text-black font-bold py-3 rounded text-xs uppercase hover:bg-gray-200 transition">
+                        {loading ? 'Updating...' : 'Update Credentials'}
+                    </button>
+
+                    {msg && (
+                        <div className={`p-3 text-xs rounded border text-center ${msg.includes('Success') ? 'bg-green-900/20 text-green-400 border-green-900/50' : 'bg-red-900/20 text-red-400 border-red-900/50'}`}>
+                            {msg}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function CustomExercisesSettings() {
@@ -215,7 +314,6 @@ function CustomExercisesSettings() {
     });
   };
 
-  // Helper to distinguish custom from default if default IDs are hardcoded 'ex_'
   const isCustom = (id) => !String(id).startsWith('ex_');
 
   return (
@@ -223,7 +321,6 @@ function CustomExercisesSettings() {
       <ConfirmModal {...modalConfig} onClose={() => setModalConfig({ ...modalConfig, isOpen: false })} />
       <h2 className="text-xl font-bold text-gray-300 mb-4">Custom Exercises</h2>
       
-      {/* Add Form */}
       <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800 mb-6">
         <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-2">Create New</label>
         <input 
@@ -238,7 +335,6 @@ function CustomExercisesSettings() {
         </div>
       </div>
 
-      {/* List */}
       <div className="space-y-2">
         {loading ? <div className="text-center text-zinc-500">Loading...</div> : (
             exercises.filter(ex => isCustom(ex.id)).length === 0 ? (
@@ -270,7 +366,6 @@ function DisplaySettings({
   const handleTimerChange = (index, value) => {
     const val = parseInt(value);
     const newIncs = [...timerIncs];
-    // Default to 0 if NaN, but keep input clean
     newIncs[index] = isNaN(val) ? 0 : val;
     setTimerIncs(newIncs);
   };
@@ -279,11 +374,8 @@ function DisplaySettings({
     <div className="animate-fade-in">
        <h2 className="text-xl font-bold text-gray-300 mb-4">Display Settings</h2>
        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-            
-            {/* Show Timer Toggle */}
             <ToggleRow label="Show Rest Timer" checked={showTimer} onChange={setShowTimer} />
             
-            {/* Timer Increments (Only visible if timer is ON) */}
             {showTimer && (
               <div className="bg-black/30 border-b border-zinc-800 p-4">
                 <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-2">Timer Quick-Add Buttons (Seconds)</label>
@@ -343,8 +435,6 @@ function UnitsPreferences({ weightUnit, setWeightUnit, measureUnit, setMeasureUn
     </div>
   );
 }
-
-// --- HELPER UI ---
 
 function HubButton({ label, subLabel, icon, onClick }) {
     return (
