@@ -46,7 +46,7 @@ export default function DailyView({ refreshTrigger }) {
   const [completedIds, setCompletedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   
-  // UPDATED: State for Skipped Exercises (Now derived from DB logs)
+  // State for Skipped Exercises
   const [skippedIds, setSkippedIds] = useState([]);
   
   // Stats
@@ -77,8 +77,8 @@ export default function DailyView({ refreshTrigger }) {
     const dateStr = getDateStr(now);
     setTodayDateStr(dateStr);
     
-    // Initial load
-    loadDailyView(now);
+    // FIXED: Load the viewDate, NOT 'now'
+    loadDailyView(viewDate);
 
     const loadSettings = () => {
         const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
@@ -146,7 +146,7 @@ export default function DailyView({ refreshTrigger }) {
         setViewCardioLogs(cLogs);
         setDailyLogs(daysLogs); 
         
-        // UPDATED: Differentiate between Skipped Logs and Completed Logs
+        // Differentiate between Skipped Logs and Completed Logs
         const doneIds = [];
         const skipIds = [];
         
@@ -264,16 +264,16 @@ export default function DailyView({ refreshTrigger }) {
     const newDate = new Date(viewDate); 
     newDate.setDate(viewDate.getDate() + offset); 
     setViewDate(newDate); 
-    loadDailyView(newDate); 
+    // Manual load removed, useEffect will handle it
   };
   
   const jumpToToday = () => { 
     const now = new Date(); 
     setViewDate(now); 
-    loadDailyView(now); 
+    // Manual load removed, useEffect will handle it
   };
 
-  const handleSwapToToday = () => { if (!currentRoutine) return; openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, () => { const now = new Date(); const todayStr = getDateStr(now); localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id); setViewDate(now); loadDailyView(now); }); };
+  const handleSwapToToday = () => { if (!currentRoutine) return; openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, () => { const now = new Date(); const todayStr = getDateStr(now); localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id); setViewDate(now); }); };
   const handleRevertSchedule = () => { openConfirm('Revert Schedule?', 'This will go back to the original scheduled routine for today.', () => { const dateStr = getDateStr(viewDate); localStorage.removeItem(`onyx_swap_${dateStr}`); loadDailyView(viewDate); }, true); };
   const handleToggleAdHocRest = () => { const dateStr = getDateStr(viewDate); const newState = !isAdHocRest; setIsAdHocRest(newState); if (newState) { localStorage.setItem(`onyx_rest_${dateStr}`, 'true'); } else { localStorage.removeItem(`onyx_rest_${dateStr}`); } };
 
@@ -301,24 +301,18 @@ export default function DailyView({ refreshTrigger }) {
     });
   };
 
-  // UPDATED: Skip Exercise Logic (Persisted to DB)
   const handleSkipExercise = async (exId) => {
     const strId = String(exId);
     const dateStr = getDateStr(viewDate);
     
-    // Find if there is already a log (skipped or completed)
     const existingLog = dailyLogs.find(l => String(l.exercise_id || l.exerciseId) === strId);
 
     if (skippedIds.includes(strId)) {
-        // CASE: Already skipped -> User clicked "Skipped" button to un-skip
-        // Action: Delete the skipped log entry
         if (existingLog) {
            await deleteLog(existingLog.id);
         }
         setSkippedIds(prev => prev.filter(id => id !== strId));
     } else {
-        // CASE: Not skipped -> User clicked "Skip"
-        // Action: Create/Update log with { isSkipped: true } marker
         const skipMarker = [{ isSkipped: true }];
         
         if (existingLog) {
@@ -326,11 +320,9 @@ export default function DailyView({ refreshTrigger }) {
         } else {
             await addLog(dateStr, exId, skipMarker);
         }
-        // Collapse UI
         setExpandedIds(expandedIds.filter(id => id !== strId));
     }
 
-    // Refresh data to ensure IDs and UI are synced
     loadDailyView(viewDate, false);
   };
 
@@ -342,9 +334,6 @@ export default function DailyView({ refreshTrigger }) {
     
     const dateStr = getDateStr(viewDate);
     const strId = String(exId);
-
-    // If it was skipped, logging it effectively "un-skips" it because we overwrite the log
-    // We don't need explicit delete logic here because updateLog will replace the sets.
 
     if (!completedIds.includes(strId)) setCompletedIds([...completedIds, strId]);
     setExpandedIds(expandedIds.filter(id => id !== strId));
