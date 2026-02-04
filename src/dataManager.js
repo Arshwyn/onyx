@@ -306,9 +306,12 @@ export const getDailyOverride = async (date) => {
         .select('routine_id')
         .eq('user_id', userId)
         .eq('date', date)
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
     
-    if (error && error.code !== 'PGRST116') console.error('Error fetching override:', error);
+    if (error) {
+        console.error('Error fetching override:', error);
+        return null;
+    }
     return data?.routine_id || null;
 };
 

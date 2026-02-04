@@ -6,7 +6,7 @@ import {
   getBodyWeights, addBodyWeight,              
   getCardioLogs, addCardioLog, deleteCardioLog, 
   getCircumferences, addCircumference, deleteCircumference,
-  getDailyOverride, setDailyOverride, removeDailyOverride // NEW IMPORTS
+  getDailyOverride, setDailyOverride, removeDailyOverride 
 } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
@@ -33,6 +33,10 @@ export default function DailyView({ refreshTrigger }) {
   const [showCalc, setShowCalc] = useState(false);
   const [calcInitWeight, setCalcInitWeight] = useState('');
 
+  // Routine Selector State
+  const [allRoutines, setAllRoutines] = useState([]);
+  const [showRoutineSelector, setShowRoutineSelector] = useState(false);
+
   // Dates
   const [todayDateStr, setTodayDateStr] = useState(''); 
   const [viewDate, setViewDate] = useState(new Date()); 
@@ -53,7 +57,7 @@ export default function DailyView({ refreshTrigger }) {
   // Stats
   const [lastPerformances, setLastPerformances] = useState({});
   const [personalRecords, setPersonalRecords] = useState({}); 
-  const [lastSessionData, setLastSessionData] = useState({}); // New for suggestions
+  const [lastSessionData, setLastSessionData] = useState({});
 
   // Body Stats
   const [viewWeight, setViewWeight] = useState(null); 
@@ -127,7 +131,6 @@ export default function DailyView({ refreshTrigger }) {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
-        // Fetch ALL data including full history AND the daily override from DB
         const [weights, cLogs, daysLogs, routines, allExercises, mData, allLogs, dbOverrideId] = await Promise.all([
             getBodyWeights(), 
             getCardioLogsByDate(dateStr), 
@@ -136,8 +139,11 @@ export default function DailyView({ refreshTrigger }) {
             getExercises(),
             getCircumferences(),
             getLogs(),
-            getDailyOverride(dateStr) // NEW: Fetch override from DB
+            getDailyOverride(dateStr) 
         ]);
+
+        // STORE ALL ROUTINES FOR DROPDOWN
+        setAllRoutines(routines);
 
         const existingWeight = weights.find(w => w.date === dateStr);
         setViewWeight(existingWeight ? existingWeight.weight : null);
@@ -161,7 +167,6 @@ export default function DailyView({ refreshTrigger }) {
         setCompletedIds(doneIds);
         setSkippedIds(skipIds);
 
-        // UPDATED: Use DB override instead of localStorage
         let routine = null;
         if (dbOverrideId) {
             routine = routines.find(r => String(r.id) === String(dbOverrideId));
@@ -282,33 +287,101 @@ export default function DailyView({ refreshTrigger }) {
     setViewDate(now); 
   };
 
-  // UPDATED: Swap Handler uses DB
+  // Two-way Swap Handler (Swap current view with Today)
   const handleSwapToToday = () => { 
     if (!currentRoutine) return; 
-    openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, async () => { 
-        const now = new Date(); 
-        const todayStr = getDateStr(now); 
-        
-        await setDailyOverride(todayStr, currentRoutine.id); // Save to DB
-        
-        // Remove local legacy to avoid conflict
-        localStorage.removeItem(`onyx_swap_${todayStr}`); 
-        
-        setViewDate(now); 
-        loadDailyView(now);
+    
+    // 1. Setup Dates
+    const now = new Date(); 
+    const todayStr = getDateStr(now);
+    const targetDateStr = getDateStr(viewDate);
+    const targetDateFormatted = viewDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    // Guard: Don't swap if we are already looking at today
+    if (todayStr === targetDateStr) return;
+
+    openConfirm(
+      'Swap Routines?', 
+      `This will swap today's schedule with ${currentRoutine.name} (${targetDateFormatted}).`, 
+      async () => { 
+        setLoading(true);
+        try {
+            // 2. Fetch fresh data to know what "Today" currently has
+            const [allRoutines, todayOverrideId] = await Promise.all([
+                getRoutines(),
+                getDailyOverride(todayStr)
+            ]);
+
+            // 3. Determine Today's Routine ID
+            let todaysRoutineId = null;
+            if (todayOverrideId) {
+                todaysRoutineId = todayOverrideId;
+            } else {
+                const todayDayName = DAYS[now.getDay()];
+                const defaultRoutine = allRoutines.find(r => r.day === todayDayName);
+                if (defaultRoutine) todaysRoutineId = defaultRoutine.id;
+            }
+
+            // 4. Identify Target Routine ID
+            const targetRoutineId = currentRoutine.id;
+
+            // 5. Execute Swap
+            // Step A: Set Today to use the Target Routine
+            await setDailyOverride(todayStr, targetRoutineId);
+            localStorage.removeItem(`onyx_rest_${todayStr}`); 
+
+            // Step B: Handle the Target Date
+            if (todaysRoutineId) {
+                // If Today had a routine (even a planned rest routine), move it to Target Date
+                await setDailyOverride(targetDateStr, todaysRoutineId);
+                localStorage.removeItem(`onyx_rest_${targetDateStr}`); 
+            } else {
+                // If Today was empty (no routine), clear Target Date override and FORCE REST
+                await removeDailyOverride(targetDateStr);
+                localStorage.setItem(`onyx_rest_${targetDateStr}`, 'true');
+            }
+            
+            // Legacy Cleanup
+            localStorage.removeItem(`onyx_swap_${todayStr}`); 
+            localStorage.removeItem(`onyx_swap_${targetDateStr}`);
+            
+            // 6. Navigate to Today
+            setViewDate(now); 
+            loadDailyView(now);
+        } catch (e) {
+            console.error("Swap failed", e);
+            setLoading(false);
+        }
     }); 
   };
 
-  // UPDATED: Revert Handler uses DB
+  // NEW: Ad-Hoc Routine Picker
+  const handleAdHocOverride = async (routineId) => {
+    setLoading(true);
+    const dateStr = getDateStr(viewDate);
+    try {
+        await setDailyOverride(dateStr, routineId);
+        
+        // Clear rest state if it was active
+        localStorage.removeItem(`onyx_rest_${dateStr}`);
+        setIsAdHocRest(false);
+        
+        // Remove legacy swaps if any
+        localStorage.removeItem(`onyx_swap_${dateStr}`);
+
+        setShowRoutineSelector(false);
+        loadDailyView(viewDate);
+    } catch (e) {
+        console.error("Ad-Hoc override failed", e);
+        setLoading(false);
+    }
+  };
+
   const handleRevertSchedule = () => { 
     openConfirm('Revert Schedule?', 'This will go back to the original scheduled routine for today.', async () => { 
         const dateStr = getDateStr(viewDate); 
-        
-        await removeDailyOverride(dateStr); // Remove from DB
-        
-        // Remove local legacy just in case
+        await removeDailyOverride(dateStr); 
         localStorage.removeItem(`onyx_swap_${dateStr}`);
-        
         loadDailyView(viewDate); 
     }, true); 
   };
@@ -422,7 +495,44 @@ export default function DailyView({ refreshTrigger }) {
             <button onClick={() => changeDay(1)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
         </div>
         <div className="flex justify-between items-end px-1">
-            <div className="flex-1 min-w-0 pr-2"><h1 className="text-3xl font-black italic uppercase truncate">{isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}</h1>{isSwapped && <div className="flex items-center gap-2 mt-1"><span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped</span><button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button></div>}</div>
+            
+            {/* UPDATED: Clickable Title with Dropdown */}
+            <div className="flex-1 min-w-0 pr-2 relative">
+                <div 
+                    onClick={() => setShowRoutineSelector(!showRoutineSelector)}
+                    className="flex items-center gap-2 cursor-pointer group select-none"
+                >
+                    {/* Added pr-1 to prevent italic text clipping */}
+                    <h1 className="text-3xl font-black italic uppercase truncate text-white group-hover:text-blue-400 transition pr-1">
+                        {isAdHocRest ? 'Rest Day' : (currentRoutine ? currentRoutine.name : 'No Plan')}
+                    </h1>
+                    {/* Added flex-shrink-0 to prevent icon squishing */}
+                    <svg className={`w-5 h-5 text-zinc-600 group-hover:text-blue-400 transition transform flex-shrink-0 ${showRoutineSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+
+                {/* Routine Dropdown */}
+                {showRoutineSelector && (
+                    <div className="absolute top-full left-0 mt-2 w-64 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden animate-fade-in">
+                        <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+                            <div className="text-[10px] text-zinc-500 font-bold uppercase px-2 py-1">Select Routine</div>
+                            {allRoutines.map(r => (
+                                <button 
+                                    key={r.id}
+                                    onClick={() => handleAdHocOverride(r.id)}
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-zinc-800 hover:text-white rounded transition flex justify-between items-center"
+                                >
+                                    <span className="font-bold">{r.name}</span>
+                                    <span className="text-[10px] text-zinc-500 uppercase">{r.day.slice(0,3)}</span>
+                                </button>
+                            ))}
+                            {allRoutines.length === 0 && <div className="text-zinc-500 text-xs px-3 py-2 italic">No routines found.</div>}
+                        </div>
+                    </div>
+                )}
+
+                {isSwapped && <div className="flex items-center gap-2 mt-1"><span className="text-[10px] text-orange-400 bg-orange-900/20 px-2 py-0.5 rounded border border-orange-900/50">Swapped</span><button onClick={handleRevertSchedule} className="text-[10px] text-zinc-400 hover:text-white underline">Revert</button></div>}
+            </div>
+
             <div className="flex gap-2 flex-shrink-0">{!isToday && !isNoRoutine && !isScheduledRest && <button onClick={handleSwapToToday} className="text-[10px] bg-blue-900/30 text-blue-300 border border-blue-500/50 px-3 py-1.5 rounded font-bold uppercase hover:bg-blue-900/50">Do This Today</button>}{!isScheduledRest && !isNoRoutine && !isAdHocRest && <button onClick={handleToggleAdHocRest} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded border border-zinc-700 transition">Rest</button>}</div>
         </div>
       </div>
