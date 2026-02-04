@@ -284,7 +284,20 @@ export default function DailyView({ refreshTrigger }) {
   const handleCompletePlannedCardio = async (plannedItem) => { const dateStr = getDateStr(viewDate); const dist = (plannedItem.distance === '' || plannedItem.distance === undefined) ? null : plannedItem.distance; const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, dist); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); };
   const handleDeleteCardio = (id) => { openConfirm('Delete Session?', 'Remove this cardio log from your history?', async () => { const dateStr = getDateStr(viewDate); const newLogs = await deleteCardioLog(id); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); }, true); };
 
-  const handleSetChange = (exId, index, field, value) => { setSetInputs(prev => { const currentSets = [...prev[exId]]; currentSets[index] = { ...currentSets[index], [field]: value }; if (index === 0) { for (let i = 1; i < currentSets.length; i++) { currentSets[i] = { ...currentSets[i], [field]: value }; } } return { ...prev, [exId]: currentSets }; }); };
+  // UPDATED: Propagate changes to ALL subsequent sets regardless of start index
+  const handleSetChange = (exId, index, field, value) => { 
+    setSetInputs(prev => { 
+        const currentSets = [...prev[exId]]; 
+        currentSets[index] = { ...currentSets[index], [field]: value }; 
+        
+        // Propagate to all subsequent sets
+        for (let i = index + 1; i < currentSets.length; i++) {
+            currentSets[i] = { ...currentSets[i], [field]: value };
+        }
+        
+        return { ...prev, [exId]: currentSets }; 
+    }); 
+  };
 
   const handleAddSet = (exId) => {
     setSetInputs(prev => {

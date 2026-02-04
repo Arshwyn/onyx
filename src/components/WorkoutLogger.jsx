@@ -84,11 +84,21 @@ export default function WorkoutLogger() {
   };
 
   const handleAddSet = () => { setSets([...sets, { weight: '', reps: '' }]); };
+  
+  // UPDATED: Propagate changes to subsequent sets
   const handleSetChange = (index, field, value) => {
     const newSets = [...sets];
-    newSets[index][field] = value;
+    // Update the modified set
+    newSets[index] = { ...newSets[index], [field]: value };
+    
+    // Propagate value to all sets below it
+    for (let i = index + 1; i < newSets.length; i++) {
+        newSets[i] = { ...newSets[i], [field]: value };
+    }
+    
     setSets(newSets);
   };
+
   const handleRemoveSet = (index) => {
     const setToRemove = sets[index];
     const hasData = setToRemove.weight || setToRemove.reps;
