@@ -77,7 +77,6 @@ export default function DailyView({ refreshTrigger }) {
     const dateStr = getDateStr(now);
     setTodayDateStr(dateStr);
     
-    // FIXED: Load the viewDate, NOT 'now'
     loadDailyView(viewDate);
 
     const loadSettings = () => {
@@ -112,10 +111,6 @@ export default function DailyView({ refreshTrigger }) {
       }
   }, [refreshTrigger]);
 
-  useEffect(() => {
-    loadHistoryStats();
-  }, [exercises]);
-
   const openConfirm = (title, message, onConfirm, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal) => { setCalcInitWeight(weightVal); setShowCalc(true); };
 
@@ -130,13 +125,15 @@ export default function DailyView({ refreshTrigger }) {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
-        const [weights, cLogs, daysLogs, routines, allExercises, mData] = await Promise.all([
+        // Fetch ALL data including full history
+        const [weights, cLogs, daysLogs, routines, allExercises, mData, allLogs] = await Promise.all([
             getBodyWeights(), 
             getCardioLogsByDate(dateStr), 
             getLogsByDate(dateStr),
             getRoutines(),
             getExercises(),
-            getCircumferences()
+            getCircumferences(),
+            getLogs() // Fetch all history
         ]);
 
         const existingWeight = weights.find(w => w.date === dateStr);
@@ -146,13 +143,11 @@ export default function DailyView({ refreshTrigger }) {
         setViewCardioLogs(cLogs);
         setDailyLogs(daysLogs); 
         
-        // Differentiate between Skipped Logs and Completed Logs
         const doneIds = [];
         const skipIds = [];
         
         daysLogs.forEach(log => {
             const strId = String(log.exercise_id || log.exerciseId);
-            // Check for our special "skipped" marker
             if (log.sets && log.sets.length > 0 && log.sets[0].isSkipped === true) {
                 skipIds.push(strId);
             } else {
@@ -188,19 +183,63 @@ export default function DailyView({ refreshTrigger }) {
                 return fullExercise ? { ...fullExercise, targetSets, targetReps, existingLog } : null;
             }).filter(ex => ex);
 
+            // 1. Calculate Stats & Suggestion Map
+            const newLastPerf = {};
+            const newPRs = {};
+            const suggestionMap = {};
+
+            mergedData.forEach(ex => {
+                const exLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+                
+                // PR Calculation
+                let maxWeight = 0;
+                exLogs.forEach(log => {
+                    if(log.sets && !log.sets[0]?.isSkipped) {
+                        log.sets.forEach(s => {
+                            const w = parseFloat(s.weight);
+                            if (w > maxWeight) maxWeight = w;
+                        });
+                    }
+                });
+                newPRs[ex.id] = maxWeight;
+
+                // Last Performance & Suggestions
+                // Filter for logs strictly BEFORE today
+                const pastLogs = exLogs.filter(l => l.date < dateStr && l.sets && !l.sets[0]?.isSkipped);
+                pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (pastLogs.length > 0) {
+                    const lastLog = pastLogs[0];
+                    
+                    // Stats: Best set from last session
+                    const bestSet = lastLog.sets.reduce((p, c) => (Number(c.weight) > Number(p.weight) ? c : p), lastLog.sets[0]);
+                    newLastPerf[ex.id] = { weight: bestSet.weight, reps: bestSet.reps };
+
+                    // Suggestion: Max weight from last session
+                    const maxLast = Math.max(...lastLog.sets.map(s => parseFloat(s.weight) || 0));
+                    if (maxLast > 0) suggestionMap[ex.id] = maxLast;
+                }
+            });
+
+            setLastPerformances(newLastPerf);
+            setPersonalRecords(newPRs);
             setExercises(mergedData);
 
+            // 2. Initialize Inputs with Auto-Population
             setSetInputs(prev => {
                 const newInputs = { ...prev };
                 mergedData.forEach(ex => {
-                    // Only initialize inputs if not already there
                     if (!newInputs[ex.id]) {
-                        // If log exists AND it's not a skipped log, populate values
+                        // Use existing log if present (and not skipped)
                         if (ex.existingLog && !ex.existingLog.sets?.[0]?.isSkipped) {
                             newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
                         } else {
-                            // Otherwise (no log OR skipped log), show empty inputs
-                            newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ weight: '', reps: ex.targetReps }));
+                            // Otherwise use suggested weight from history
+                            const suggestedW = suggestionMap[ex.id] || '';
+                            newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ 
+                                weight: suggestedW, 
+                                reps: ex.targetReps 
+                            }));
                         }
                     } 
                 });
@@ -218,59 +257,17 @@ export default function DailyView({ refreshTrigger }) {
     }
   };
 
-  const loadHistoryStats = async () => {
-    if (exercises.length === 0) return;
-    const allLogs = await getLogs(); 
-    
-    const historyStats = {};
-    exercises.forEach(ex => {
-        const pastLogs = allLogs.filter(l => 
-            String(l.exercise_id || l.exerciseId) === String(ex.id) && 
-            new Date(l.date) < new Date(getDateStr(viewDate)) 
-        );
-        if (pastLogs.length > 0) {
-            pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const lastLog = pastLogs[0]; 
-            const sets = lastLog.sets || [];
-            // Ensure we don't display "skipped" markers as history stats
-            if (sets.length > 0 && !sets[0].isSkipped) {
-                const bestSet = sets.reduce((prev, current) => (Number(current.weight) > Number(prev.weight) ? current : prev), sets[0]);
-                historyStats[ex.id] = `${bestSet.weight} ${weightUnit.toLowerCase()} x ${bestSet.reps}`;
-            }
-        }
-    });
-    setLastPerformances(historyStats);
-
-    const prMap = {};
-    exercises.forEach(ex => {
-        const exerciseLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
-        let maxWeight = 0;
-        exerciseLogs.forEach(log => {
-            if(log.sets && !log.sets[0]?.isSkipped) {
-                log.sets.forEach(s => {
-                    const w = parseFloat(s.weight);
-                    if (w > maxWeight) maxWeight = w;
-                });
-            }
-        });
-        prMap[ex.id] = maxWeight;
-    });
-    setPersonalRecords(prMap);
-  };
-
   const moveExercise = (index, direction, e) => { e.stopPropagation(); if (direction === -1 && index === 0) return; if (direction === 1 && index === exercises.length - 1) return; const newOrder = [...exercises]; const temp = newOrder[index]; newOrder[index] = newOrder[index + direction]; newOrder[index + direction] = temp; setExercises(newOrder); };
   
   const changeDay = (offset) => { 
     const newDate = new Date(viewDate); 
     newDate.setDate(viewDate.getDate() + offset); 
     setViewDate(newDate); 
-    // Manual load removed, useEffect will handle it
   };
   
   const jumpToToday = () => { 
     const now = new Date(); 
     setViewDate(now); 
-    // Manual load removed, useEffect will handle it
   };
 
   const handleSwapToToday = () => { if (!currentRoutine) return; openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, () => { const now = new Date(); const todayStr = getDateStr(now); localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id); setViewDate(now); }); };
@@ -284,17 +281,13 @@ export default function DailyView({ refreshTrigger }) {
   const handleCompletePlannedCardio = async (plannedItem) => { const dateStr = getDateStr(viewDate); const dist = (plannedItem.distance === '' || plannedItem.distance === undefined) ? null : plannedItem.distance; const newLogs = await addCardioLog(dateStr, plannedItem.type, plannedItem.duration, dist); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); };
   const handleDeleteCardio = (id) => { openConfirm('Delete Session?', 'Remove this cardio log from your history?', async () => { const dateStr = getDateStr(viewDate); const newLogs = await deleteCardioLog(id); const todaysCardio = newLogs.filter(c => c.date === dateStr); setViewCardioLogs(todaysCardio); }, true); };
 
-  // UPDATED: Propagate changes to ALL subsequent sets regardless of start index
   const handleSetChange = (exId, index, field, value) => { 
     setSetInputs(prev => { 
         const currentSets = [...prev[exId]]; 
         currentSets[index] = { ...currentSets[index], [field]: value }; 
-        
-        // Propagate to all subsequent sets
         for (let i = index + 1; i < currentSets.length; i++) {
             currentSets[i] = { ...currentSets[i], [field]: value };
         }
-        
         return { ...prev, [exId]: currentSets }; 
     }); 
   };
@@ -317,25 +310,17 @@ export default function DailyView({ refreshTrigger }) {
   const handleSkipExercise = async (exId) => {
     const strId = String(exId);
     const dateStr = getDateStr(viewDate);
-    
     const existingLog = dailyLogs.find(l => String(l.exercise_id || l.exerciseId) === strId);
 
     if (skippedIds.includes(strId)) {
-        if (existingLog) {
-           await deleteLog(existingLog.id);
-        }
+        if (existingLog) await deleteLog(existingLog.id);
         setSkippedIds(prev => prev.filter(id => id !== strId));
     } else {
         const skipMarker = [{ isSkipped: true }];
-        
-        if (existingLog) {
-            await updateLog({ ...existingLog, sets: skipMarker });
-        } else {
-            await addLog(dateStr, exId, skipMarker);
-        }
+        if (existingLog) await updateLog({ ...existingLog, sets: skipMarker });
+        else await addLog(dateStr, exId, skipMarker);
         setExpandedIds(expandedIds.filter(id => id !== strId));
     }
-
     loadDailyView(viewDate, false);
   };
 
@@ -367,7 +352,6 @@ export default function DailyView({ refreshTrigger }) {
     else { await addLog(dateStr, exId, validSets); }
 
     loadDailyView(viewDate, false);
-    loadHistoryStats();
   };
 
   const toggleExpand = (exId) => { const strId = String(exId); if (expandedIds.includes(strId)) { setExpandedIds(expandedIds.filter(id => id !== strId)); } else { setExpandedIds([...expandedIds, strId]); } };
@@ -469,7 +453,7 @@ export default function DailyView({ refreshTrigger }) {
                             {(isComplete || isSkipped) ? (
                                 <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">{isExpanded ? 'Hide' : 'Show'} <span className={`text-lg leading-none transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span></div>
                             ) : (
-                                <><div className="mb-1"><span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span><span className="text-sm font-mono text-blue-400 font-bold">{ex.targetSets} x {ex.targetReps}</span></div>{lastStats && <div><span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span><span className="text-sm font-mono text-gray-300">{lastStats}</span></div>}</>
+                                <><div className="mb-1"><span className="text-[10px] text-zinc-500 uppercase font-bold block">GOAL</span><span className="text-sm font-mono text-blue-400 font-bold">{ex.targetSets} x {ex.targetReps}</span></div>{lastStats && <div><span className="text-[10px] text-zinc-500 uppercase font-bold block">LAST</span><span className="text-sm font-mono text-gray-300">{lastStats.weight} {weightUnit.toLowerCase()} x {lastStats.reps}</span></div>}</>
                             )}
                         </div>
                     </div>
