@@ -27,6 +27,9 @@ export default function WorkoutLogger() {
   const [exercises, setExercises] = useState([]);
   const [exerciseId, setExerciseId] = useState('');
   const [personalRecords, setPersonalRecords] = useState({});
+  
+  // Store full data (weight + reps) from last session
+  const [lastSessionData, setLastSessionData] = useState({});
 
   const [date, setDate] = useState(getLocalDate());
   const [sets, setSets] = useState([{ weight: '', reps: '' }]);
@@ -45,20 +48,47 @@ export default function WorkoutLogger() {
         if (loadedEx.length > 0) setExerciseId(prev => prev || loadedEx[0].id);
 
         const prMap = {};
+        const lastSessionMap = {};
+
         loadedEx.forEach(ex => {
           const pastLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
+          
+          // Sort descending by date
+          pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
           let max = 0;
+          
+          // 1. Calculate PR
           pastLogs.forEach(log => {
-            if (log.sets) {
-              log.sets.forEach(s => {
-                const w = parseFloat(s.weight);
-                if (w > max) max = w;
-              });
+            if (log.sets && !log.sets[0]?.isSkipped) {
+                log.sets.forEach(s => {
+                    const w = parseFloat(s.weight);
+                    if (w > max) max = w;
+                });
             }
           });
           prMap[ex.id] = max;
+
+          // 2. Find Last Session Data (First valid log)
+          const lastValidLog = pastLogs.find(l => l.sets && !l.sets[0]?.isSkipped);
+          
+          if (lastValidLog && lastValidLog.sets.length > 0) {
+             // Find the "best" set from that session to use as suggestion
+             const bestSet = lastValidLog.sets.reduce((prev, curr) => 
+                (parseFloat(curr.weight) || 0) > (parseFloat(prev.weight) || 0) ? curr : prev
+             , lastValidLog.sets[0]);
+
+             if (bestSet) {
+                 lastSessionMap[ex.id] = { 
+                     weight: bestSet.weight, 
+                     reps: bestSet.reps 
+                 };
+             }
+          }
         });
+
         setPersonalRecords(prMap);
+        setLastSessionData(lastSessionMap);
       } catch (error) {
         console.error("Error loading logger data", error);
       }
@@ -74,6 +104,17 @@ export default function WorkoutLogger() {
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
 
+  // Auto-populate weight AND reps
+  useEffect(() => {
+    if (!exerciseId) return;
+    const suggested = lastSessionData[exerciseId];
+    if (suggested) {
+        setSets([{ weight: suggested.weight, reps: suggested.reps }]);
+    } else {
+        setSets([{ weight: '', reps: '' }]);
+    }
+  }, [exerciseId, lastSessionData]);
+
   const openConfirm = (title, message, onConfirm, isDestructive = false) => {
     setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
   };
@@ -83,19 +124,18 @@ export default function WorkoutLogger() {
     setShowCalc(true);
   };
 
-  const handleAddSet = () => { setSets([...sets, { weight: '', reps: '' }]); };
+  // UPDATED: Now copies the last set's values instead of adding a blank line
+  const handleAddSet = () => { 
+    const lastSet = sets[sets.length - 1] || { weight: '', reps: '' };
+    setSets([...sets, { weight: lastSet.weight, reps: lastSet.reps }]); 
+  };
   
-  // UPDATED: Propagate changes to subsequent sets
   const handleSetChange = (index, field, value) => {
     const newSets = [...sets];
-    // Update the modified set
     newSets[index] = { ...newSets[index], [field]: value };
-    
-    // Propagate value to all sets below it
     for (let i = index + 1; i < newSets.length; i++) {
         newSets[i] = { ...newSets[i], [field]: value };
     }
-    
     setSets(newSets);
   };
 
@@ -174,8 +214,22 @@ export default function WorkoutLogger() {
               placeholder="Select Exercise..."
             />
           </div>
+          
           <div className="space-y-2 mb-4">
-            <label className="block text-xs text-gray-500 mb-1 uppercase font-bold">Sets</label>
+            <div className="flex justify-between items-end">
+                <label className="block text-xs text-gray-500 uppercase font-bold">Sets</label>
+                
+                {/* Display Last Session Stats */}
+                {lastSessionData[exerciseId] && (
+                    <div className="text-right">
+                        <span className="text-[10px] text-zinc-500 uppercase font-bold mr-2">Last Session</span>
+                        <span className="text-xs font-mono text-gray-300">
+                            {lastSessionData[exerciseId].weight} {weightUnit} x {lastSessionData[exerciseId].reps}
+                        </span>
+                    </div>
+                )}
+            </div>
+
             {sets.map((set, index) => (
               <div key={index} className="flex gap-2">
                 <div className="flex-1 relative">
