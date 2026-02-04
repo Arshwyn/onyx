@@ -298,3 +298,34 @@ export const getRecentCardioLogs = async (limit = 50) => {
   if (error) throw error;
   return data;
 };
+
+export const getDailyOverride = async (date) => {
+    const userId = await getUser();
+    const { data, error } = await supabase
+        .from('daily_overrides')
+        .select('routine_id')
+        .eq('user_id', userId)
+        .eq('date', date)
+        .single();
+    
+    if (error && error.code !== 'PGRST116') console.error('Error fetching override:', error);
+    return data?.routine_id || null;
+};
+
+export const setDailyOverride = async (date, routineId) => {
+    const userId = await getUser();
+    const { error } = await supabase
+        .from('daily_overrides')
+        .upsert({ user_id: userId, date, routine_id: routineId });
+    if (error) console.error('Error setting override:', error);
+};
+
+export const removeDailyOverride = async (date) => {
+    const userId = await getUser();
+    const { error } = await supabase
+        .from('daily_overrides')
+        .delete()
+        .eq('user_id', userId)
+        .eq('date', date);
+    if (error) console.error('Error removing override:', error);
+};

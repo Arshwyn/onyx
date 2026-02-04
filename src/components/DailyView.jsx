@@ -5,7 +5,8 @@ import {
   getLogsByDate, getCardioLogsByDate, 
   getBodyWeights, addBodyWeight,              
   getCardioLogs, addCardioLog, deleteCardioLog, 
-  getCircumferences, addCircumference, deleteCircumference 
+  getCircumferences, addCircumference, deleteCircumference,
+  getDailyOverride, setDailyOverride, removeDailyOverride // NEW IMPORTS
 } from '../dataManager';
 import ConfirmModal from './ConfirmModal'; 
 import PlateCalculator from './PlateCalculator'; 
@@ -52,6 +53,7 @@ export default function DailyView({ refreshTrigger }) {
   // Stats
   const [lastPerformances, setLastPerformances] = useState({});
   const [personalRecords, setPersonalRecords] = useState({}); 
+  const [lastSessionData, setLastSessionData] = useState({}); // New for suggestions
 
   // Body Stats
   const [viewWeight, setViewWeight] = useState(null); 
@@ -125,15 +127,16 @@ export default function DailyView({ refreshTrigger }) {
         const isRest = localStorage.getItem(restKey) === 'true';
         setIsAdHocRest(isRest);
 
-        // Fetch ALL data including full history
-        const [weights, cLogs, daysLogs, routines, allExercises, mData, allLogs] = await Promise.all([
+        // Fetch ALL data including full history AND the daily override from DB
+        const [weights, cLogs, daysLogs, routines, allExercises, mData, allLogs, dbOverrideId] = await Promise.all([
             getBodyWeights(), 
             getCardioLogsByDate(dateStr), 
             getLogsByDate(dateStr),
             getRoutines(),
             getExercises(),
             getCircumferences(),
-            getLogs() // Fetch all history
+            getLogs(),
+            getDailyOverride(dateStr) // NEW: Fetch override from DB
         ]);
 
         const existingWeight = weights.find(w => w.date === dateStr);
@@ -158,11 +161,10 @@ export default function DailyView({ refreshTrigger }) {
         setCompletedIds(doneIds);
         setSkippedIds(skipIds);
 
-        const swapKey = `onyx_swap_${dateStr}`;
-        const swappedRoutineId = localStorage.getItem(swapKey);
+        // UPDATED: Use DB override instead of localStorage
         let routine = null;
-        if (swappedRoutineId) {
-            routine = routines.find(r => String(r.id) === String(swappedRoutineId));
+        if (dbOverrideId) {
+            routine = routines.find(r => String(r.id) === String(dbOverrideId));
             setIsSwapped(!!routine); 
         } 
         if (!routine) {
@@ -183,10 +185,10 @@ export default function DailyView({ refreshTrigger }) {
                 return fullExercise ? { ...fullExercise, targetSets, targetReps, existingLog } : null;
             }).filter(ex => ex);
 
-            // 1. Calculate Stats & Suggestion Map
+            // Calculate Stats & Suggestions
             const newLastPerf = {};
             const newPRs = {};
-            const suggestionMap = {};
+            const lastSessionMap = {};
 
             mergedData.forEach(ex => {
                 const exLogs = allLogs.filter(l => String(l.exercise_id || l.exerciseId) === String(ex.id));
@@ -204,41 +206,51 @@ export default function DailyView({ refreshTrigger }) {
                 newPRs[ex.id] = maxWeight;
 
                 // Last Performance & Suggestions
-                // Filter for logs strictly BEFORE today
                 const pastLogs = exLogs.filter(l => l.date < dateStr && l.sets && !l.sets[0]?.isSkipped);
                 pastLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
                 if (pastLogs.length > 0) {
                     const lastLog = pastLogs[0];
                     
-                    // Stats: Best set from last session
+                    // Stats
                     const bestSet = lastLog.sets.reduce((p, c) => (Number(c.weight) > Number(p.weight) ? c : p), lastLog.sets[0]);
                     newLastPerf[ex.id] = { weight: bestSet.weight, reps: bestSet.reps };
 
-                    // Suggestion: Max weight from last session
-                    const maxLast = Math.max(...lastLog.sets.map(s => parseFloat(s.weight) || 0));
-                    if (maxLast > 0) suggestionMap[ex.id] = maxLast;
+                    // Suggestion (Last Session)
+                    const lastBestSet = lastLog.sets.reduce((prev, curr) => 
+                        (parseFloat(curr.weight) || 0) > (parseFloat(prev.weight) || 0) ? curr : prev
+                    , lastLog.sets[0]);
+
+                    if (lastBestSet) {
+                        lastSessionMap[ex.id] = { 
+                            weight: lastBestSet.weight, 
+                            reps: lastBestSet.reps 
+                        };
+                    }
                 }
             });
 
             setLastPerformances(newLastPerf);
             setPersonalRecords(newPRs);
+            setLastSessionData(lastSessionMap);
             setExercises(mergedData);
 
-            // 2. Initialize Inputs with Auto-Population
+            // Initialize Inputs with Auto-Population
             setSetInputs(prev => {
                 const newInputs = { ...prev };
                 mergedData.forEach(ex => {
                     if (!newInputs[ex.id]) {
-                        // Use existing log if present (and not skipped)
                         if (ex.existingLog && !ex.existingLog.sets?.[0]?.isSkipped) {
                             newInputs[ex.id] = ex.existingLog.sets.map(s => ({ weight: s.weight, reps: s.reps }));
                         } else {
-                            // Otherwise use suggested weight from history
-                            const suggestedW = suggestionMap[ex.id] || '';
+                            // Use last session data for suggestion
+                            const suggested = lastSessionMap[ex.id];
+                            const defWeight = suggested ? suggested.weight : '';
+                            const defReps = suggested ? suggested.reps : ex.targetReps;
+
                             newInputs[ex.id] = Array(parseInt(ex.targetSets)).fill().map(() => ({ 
-                                weight: suggestedW, 
-                                reps: ex.targetReps 
+                                weight: defWeight, 
+                                reps: defReps 
                             }));
                         }
                     } 
@@ -270,8 +282,37 @@ export default function DailyView({ refreshTrigger }) {
     setViewDate(now); 
   };
 
-  const handleSwapToToday = () => { if (!currentRoutine) return; openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, () => { const now = new Date(); const todayStr = getDateStr(now); localStorage.setItem(`onyx_swap_${todayStr}`, currentRoutine.id); setViewDate(now); }); };
-  const handleRevertSchedule = () => { openConfirm('Revert Schedule?', 'This will go back to the original scheduled routine for today.', () => { const dateStr = getDateStr(viewDate); localStorage.removeItem(`onyx_swap_${dateStr}`); loadDailyView(viewDate); }, true); };
+  // UPDATED: Swap Handler uses DB
+  const handleSwapToToday = () => { 
+    if (!currentRoutine) return; 
+    openConfirm('Swap Routine?', `Do you want to replace today's workout with ${currentRoutine.name}?`, async () => { 
+        const now = new Date(); 
+        const todayStr = getDateStr(now); 
+        
+        await setDailyOverride(todayStr, currentRoutine.id); // Save to DB
+        
+        // Remove local legacy to avoid conflict
+        localStorage.removeItem(`onyx_swap_${todayStr}`); 
+        
+        setViewDate(now); 
+        loadDailyView(now);
+    }); 
+  };
+
+  // UPDATED: Revert Handler uses DB
+  const handleRevertSchedule = () => { 
+    openConfirm('Revert Schedule?', 'This will go back to the original scheduled routine for today.', async () => { 
+        const dateStr = getDateStr(viewDate); 
+        
+        await removeDailyOverride(dateStr); // Remove from DB
+        
+        // Remove local legacy just in case
+        localStorage.removeItem(`onyx_swap_${dateStr}`);
+        
+        loadDailyView(viewDate); 
+    }, true); 
+  };
+
   const handleToggleAdHocRest = () => { const dateStr = getDateStr(viewDate); const newState = !isAdHocRest; setIsAdHocRest(newState); if (newState) { localStorage.setItem(`onyx_rest_${dateStr}`, 'true'); } else { localStorage.removeItem(`onyx_rest_${dateStr}`); } };
 
   const handleSaveWeight = async () => { if (!weightInput) return; const dateStr = getDateStr(viewDate); await addBodyWeight(weightInput, dateStr); setViewWeight(weightInput); };
@@ -352,6 +393,7 @@ export default function DailyView({ refreshTrigger }) {
     else { await addLog(dateStr, exId, validSets); }
 
     loadDailyView(viewDate, false);
+    loadHistoryStats();
   };
 
   const toggleExpand = (exId) => { const strId = String(exId); if (expandedIds.includes(strId)) { setExpandedIds(expandedIds.filter(id => id !== strId)); } else { setExpandedIds([...expandedIds, strId]); } };
