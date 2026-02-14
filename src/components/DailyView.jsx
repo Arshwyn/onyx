@@ -63,7 +63,7 @@ export default function DailyView({ refreshTrigger }) {
   const [viewWeight, setViewWeight] = useState(null); 
   const [weightInput, setWeightInput] = useState('');
   const [viewMeasurements, setViewMeasurements] = useState([]);
-  const [measurePart, setMeasurePart] = useState('Waist');
+  const [measurePart, setMeasurePart] = useState('Navel');
   const [measureValue, setMeasureValue] = useState('');
   
   // Cardio
@@ -75,7 +75,7 @@ export default function DailyView({ refreshTrigger }) {
   const [isSwapped, setIsSwapped] = useState(false); 
 
   const CARDIO_TYPES = ['Run', 'Walk', 'Cycle', 'Treadmill', 'Stairmaster', 'Rowing', 'Elliptical', 'HIIT', 'Other'];
-  const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
+  const BODY_PARTS = ['Navel', 'Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   useEffect(() => {

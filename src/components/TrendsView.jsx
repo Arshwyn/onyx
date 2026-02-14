@@ -41,11 +41,11 @@ export default function TrendsView() {
   // --- STATE: MEASUREMENTS ---
   const [measurementData, setMeasurementData] = useState([]);
   const [filteredMeasurements, setFilteredMeasurements] = useState([]);
-  const [bodyPart, setBodyPart] = useState('Waist');
+  const [bodyPart, setBodyPart] = useState('Navel');
   const [inputMeasurement, setInputMeasurement] = useState('');
   const [measureDate, setMeasureDate] = useState(getLocalDate());
 
-  const BODY_PARTS = ['Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
+  const BODY_PARTS = ['Navel', 'Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
 
   useEffect(() => {
     loadAllData();
