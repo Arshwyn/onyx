@@ -1,60 +1,36 @@
 import { supabase } from './supabaseClient';
 
-// --- HELPER: Get Current User ---
 const getUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     return user?.id;
 };
 
-// --- 1. EXERCISES ---
-// Categories removed from defaults as per request "remove any mention"
-const DEFAULT_EXERCISES = [
-    { id: 'ex_1', name: 'Squat' },
-    { id: 'ex_2', name: 'Bench Press' },
-    { id: 'ex_3', name: 'Deadlift' },
-    { id: 'ex_4', name: 'Overhead Press' },
-    { id: 'ex_5', name: 'Dumbbell Row' },
-    { id: 'ex_6', name: 'Lunges' },
-    { id: 'ex_7', name: 'Pull Up' },
-    { id: 'ex_8', name: 'Dips' },
-    { id: 'ex_9', name: 'Lateral Raise' },
-    { id: 'ex_10', name: 'Bicep Curl' },
-    { id: 'ex_11', name: 'Tricep Extension' },
-    { id: 'ex_12', name: 'Leg Press' },
-    { id: 'ex_13', name: 'Leg Curl' },
-    { id: 'ex_14', name: 'Calf Raise' },
-    { id: 'ex_15', name: 'Face Pull' }
-];
-
 export const getExercises = async () => {
-    const { data, error } = await supabase.from('custom_exercises').select('*');
-    if (error) console.error(error);
+    const [globalRes, customRes] = await Promise.all([
+        supabase.from('global_exercises').select('*'),
+        supabase.from('custom_exercises').select('*')
+    ]);
 
-    const custom = data || [];
-    const formattedCustom = custom.map(e => ({ ...e, id: String(e.id) }));
+    const global = globalRes.data || [];
+    const custom = (customRes.data || []).map(e => ({ ...e, id: String(e.id) }));
 
-    const allExercises = [...DEFAULT_EXERCISES, ...formattedCustom];
+    const allExercises = [...global, ...custom];
     
-    // Sort alphabetically (added in previous step)
-    allExercises.sort((a, b) => a.name.localeCompare(b.name));
-
-    return allExercises;
+    return allExercises.sort((a, b) => a.name.localeCompare(b.name));
 };
 
-// UPDATED: No longer accepts 'category' argument
 export const addExercise = async (name) => {
     const userId = await getUser();
     const { data, error } = await supabase.from('custom_exercises').insert([{
         user_id: userId,
         name,
-        category: 'Custom' // Default value to satisfy potential DB requirement
+        category: 'Custom'
     }]).select();
 
     if (error) console.error(error);
     return data;
 };
 
-// ... (Rest of file - deleteCustomExercise, getRoutines, etc. - remains exactly the same)
 export const deleteCustomExercise = async (id) => {
     if (String(id).startsWith('ex_')) return;
     const { error } = await supabase.from('custom_exercises').delete().eq('id', id);
@@ -306,7 +282,7 @@ export const getDailyOverride = async (date) => {
         .select('routine_id')
         .eq('user_id', userId)
         .eq('date', date)
-        .maybeSingle(); // Changed from .single() to .maybeSingle()
+        .maybeSingle();
     
     if (error) {
         console.error('Error fetching override:', error);
