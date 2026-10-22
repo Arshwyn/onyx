@@ -35,12 +35,90 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 This repo does not ship SQL for the database; you create the schema in your own Supabase project. The app expects:
 
 1. **Tables**: `global_exercises`, `custom_exercises`, `routines`, `workout_logs`, `cardio_logs`, `body_weights`, `circumferences`, `user_settings`, `daily_overrides`. Column names and types are defined by how `src/dataManager.ts` reads and writes them.
-2. **Row Level Security** enabled on every user-owned table, with policies scoping rows to `auth.uid()` (each user may only select, insert, update and delete their own rows). `global_exercises` is shared, read-only reference data.
+2. **Row Level Security (RLS)** enabled on all 9 tables. The anon key is shipped in the frontend bundle, so it is safe to expose only because RLS is enabled on every table.
+   - User-owned tables use owner-scoped policies for the `authenticated` role: `auth.uid() = user_id`, set as both `USING` and `WITH CHECK`.
+   - `global_exercises` is shared, read-only reference data: give it a `SELECT` policy only.
+   - Grant each table only the privileges the app needs (to `authenticated`):
+
+     | Table | Privileges |
+     | --- | --- |
+     | `body_weights`, `cardio_logs`, `routines`, `workout_logs` | SELECT, INSERT, UPDATE, DELETE |
+     | `custom_exercises`, `circumferences` | SELECT, INSERT, DELETE |
+     | `user_settings` | SELECT, INSERT, UPDATE (upsert) |
+     | `daily_overrides` | SELECT, INSERT, UPDATE (upsert), DELETE |
+     | `global_exercises` | SELECT (policy only, read-only) |
+
+   - The `anon` role has no grants on user tables. Revoke the default anon grants, and set default privileges so tables created later do not grant `anon`.
 3. **Unique constraints** the upserts rely on: `user_settings` on `user_id`, and `daily_overrides` on `(user_id, date)`.
-4. **RPC function** `get_exercise_stats(p_exercise_ids, p_before_date)`, called from `src/dataManager.ts`.
-5. **Email auth** enabled (Authentication -> Providers -> Email).
+4. **RPC function** `get_exercise_stats(p_exercise_ids text[], p_before_date date)`, called from `src/dataManager.ts`. It must be `SECURITY INVOKER` (so RLS applies to the caller), with a fixed `search_path`, and `EXECUTE` granted to `authenticated` only (revoked from `PUBLIC` and `anon`).
+5. **Email auth** enabled (Authentication -> Providers -> Email), with sign-up disabled or invite-only (Authentication settings), so arbitrary users cannot create accounts.
 
 Then copy the project URL and anon key from Project Settings -> API.
+
+**Service-role key.** The service-role key bypasses RLS. It is server-side only: never put it in a `VITE_*` variable, the frontend bundle, or any committed file. Only the anon key goes in `VITE_SUPABASE_ANON_KEY`.
+
+#### Example SQL
+
+Generic, placeholder-only example for one table (`example_table`, with a `user_id uuid` column). Repeat the pattern for each user-owned table, adjusting the privileges per the table above.
+
+```sql
+-- Enable RLS and add owner-scoped policies
+alter table public.example_table enable row level security;
+
+create policy "example_table_select_own" on public.example_table
+  for select to authenticated
+  using (auth.uid() = user_id);
+
+create policy "example_table_insert_own" on public.example_table
+  for insert to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "example_table_update_own" on public.example_table
+  for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "example_table_delete_own" on public.example_table
+  for delete to authenticated
+  using (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.example_table to authenticated;
+
+-- Harden the RPC (keep your function body; add these attributes)
+alter function public.get_exercise_stats(p_exercise_ids text[], p_before_date date)
+  security invoker
+  set search_path = public;
+
+revoke execute on function public.get_exercise_stats(text[], date) from public, anon;
+grant execute on function public.get_exercise_stats(text[], date) to authenticated;
+
+-- Keep anon away from tables, now and in the future
+revoke all on all tables in schema public from anon;
+alter default privileges in schema public revoke all on tables from anon;
+```
+
+#### How to verify
+
+```sql
+-- RLS is enabled on the 9 tables (expect relrowsecurity = true for each)
+select relname, relrowsecurity
+from pg_class
+where relnamespace = 'public'::regnamespace
+  and relname in ('body_weights', 'cardio_logs', 'circumferences', 'custom_exercises',
+                  'daily_overrides', 'global_exercises', 'routines', 'user_settings',
+                  'workout_logs');
+
+-- The function is SECURITY INVOKER (prosecdef = false) with the expected search_path
+select proname, prosecdef, proconfig
+from pg_proc
+where proname = 'get_exercise_stats'
+  and pronamespace = 'public'::regnamespace;
+
+-- anon has no table privileges (expect zero rows)
+select table_name, privilege_type
+from information_schema.role_table_grants
+where grantee = 'anon' and table_schema = 'public';
+```
 
 ### Environment
 
