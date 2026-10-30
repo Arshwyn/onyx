@@ -846,4 +846,35 @@ describe('DailyView database-backed rest days', () => {
     await waitFor(() => expect(setDailyRest).toHaveBeenCalled());
     expect(localStorage.getItem('onyx_rest_2026-01-05')).toBe('true');
   });
+
+  it('skips migration and keeps the legacy key when the override read fails', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false, readFailed: true });
+    localStorage.setItem('onyx_rest_2026-01-05', 'true');
+
+    render(<DailyView />);
+
+    await waitFor(() => expect(getDailyOverrideState).toHaveBeenCalledWith('2026-01-05'));
+    expect(setDailyRest).not.toHaveBeenCalled();
+    expect(localStorage.getItem('onyx_rest_2026-01-05')).toBe('true');
+  });
+
+  it('makes no writes when swapping while today\'s override read fails', async () => {
+    getRoutines.mockResolvedValue([{ ...ROUTINE, days: [] }]);
+    getDailyOverrideState.mockImplementation(async () => ({ routineId: 'r1', isRest: false, readFailed: false }));
+    render(<DailyView />);
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Next day'));
+    getDailyOverrideState.mockImplementation(async (d: string) => (
+      d === new Date().toLocaleDateString('en-CA')
+        ? { routineId: null, isRest: false, readFailed: true }
+        : { routineId: 'r1', isRest: false, readFailed: false }
+    ));
+    fireEvent.click(await screen.findByText('Do This Today'));
+    fireEvent.click(await screen.findByText('Confirm'));
+
+    await waitFor(() => expect(emitError).toHaveBeenCalledWith('Could not swap routine.'));
+    expect(setDailyOverride).not.toHaveBeenCalled();
+    expect(setDailyRest).not.toHaveBeenCalled();
+  });
 });
