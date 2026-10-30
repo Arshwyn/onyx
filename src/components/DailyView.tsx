@@ -6,7 +6,7 @@ import {
   addBodyWeight,
   getCardioLogs, addCardioLog, deleteCardioLog,
   getCircumferencesByDate, addCircumference, deleteCircumference,
-  getDailyOverride, setDailyOverride, removeDailyOverride
+  getDailyOverrideState, setDailyOverride, setDailyRest, removeDailyOverride
 } from '../dataManager';
 import { emitError } from '../lib/toastBus';
 import { suggest, DEFAULT_PROGRESSION_CONFIG, type Suggestion } from '../lib/progression';
@@ -128,8 +128,10 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
     const now = new Date();
     const dateStr = getDateStr(now);
     setTodayDateStr(dateStr);
-    
-    loadDailyView(viewDate);
+
+    // Move any legacy localStorage rest flags into the database first so the
+    // initial load reflects them.
+    migrateLegacyRestFlags().finally(() => loadDailyView(viewDate));
 
     const loadSettings = () => {
         const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
@@ -164,6 +166,35 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
   const openConfirm = (title: string, message: string, onConfirm: (() => void) | null = null, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal: string | number) => { setCalcInitWeight(weightVal); setShowCalc(true); };
 
+  // One-time, idempotent move of legacy `onyx_rest_<date>` flags into
+  // daily_overrides. A local key is removed only once the database holds the
+  // outcome (existing row kept, or rest write applied/queued).
+  const migrateLegacyRestFlags = async () => {
+    try {
+        // Skipped offline: without a read of the existing row, a rest write
+        // could replace a routine override. It retries on a later mount.
+        if (!navigator.onLine) return;
+        const prefix = 'onyx_rest_';
+        const dates: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix) && localStorage.getItem(key) === 'true') {
+                dates.push(key.slice(prefix.length));
+            }
+        }
+        for (const date of dates) {
+            const state = await getDailyOverrideState(date);
+            if (state.routineId || state.isRest) {
+                localStorage.removeItem(`${prefix}${date}`);
+                continue;
+            }
+            if (await setDailyRest(date)) localStorage.removeItem(`${prefix}${date}`);
+        }
+    } catch (e) {
+        console.error('Legacy rest migration failed', e);
+    }
+  };
+
   const loadDailyView = async (targetDate: Date, showLoading = true) => {
     try {
         if (showLoading) setLoading(true);
@@ -171,21 +202,19 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
         const dateStr = getDateStr(targetDate);
         const dayName = DAYS[targetDate.getDay()];
         
-        const restKey = `onyx_rest_${dateStr}`;
-        const isRest = localStorage.getItem(restKey) === 'true';
-        setIsAdHocRest(isRest);
-
-        // getDailyViewBundle/getRoutines/getExercises/getDailyOverride each
+        // getDailyViewBundle/getRoutines/getExercises/getDailyOverrideState each
         // fall back to a local cache on failure rather than rejecting (see
         // dataManager.ts), so this Promise.all — and the try/catch around
         // it — is a safety net for genuinely unexpected errors, not the
         // primary way offline is handled here.
-        const [bundle, routines, allExercises, dbOverrideId] = await Promise.all([
+        const [bundle, routines, allExercises, overrideState] = await Promise.all([
             getDailyViewBundle(dateStr),
             getRoutines(),
             getExercises(),
-            getDailyOverride(dateStr)
+            getDailyOverrideState(dateStr)
         ]);
+        const dbOverrideId = overrideState.routineId;
+        setIsAdHocRest(overrideState.isRest);
         const { weights, cardioLogs: cLogs, logs: daysLogs, measurements: mData } = bundle;
 
         // STORE ALL ROUTINES FOR DROPDOWN
@@ -244,7 +273,7 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
             // Read straight from localStorage rather than component state --
             // this runs inside the initial-load effect, before that state's
             // own settings-load has necessarily flowed through a render (same
-            // pattern as isRest above), and progression's source of truth is
+            // pattern as the settings loaded above), and progression's source of truth is
             // localStorage per CLAUDE.md's settings architecture anyway.
             const progressionEnabled = localStorage.getItem('onyx_progression_enabled') === 'true';
             const progressionStep = parseFloat(localStorage.getItem('onyx_progression_step') || '') || DEFAULT_PROGRESSION_CONFIG.step;
@@ -366,16 +395,17 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
         setLoading(true);
         try {
             // 2. Fetch fresh data to know what "Today" currently has
-            const [allRoutines, todayOverrideId] = await Promise.all([
+            const [allRoutines, todayState] = await Promise.all([
                 getRoutines(),
-                getDailyOverride(todayStr)
+                getDailyOverrideState(todayStr)
             ]);
+            const todayOverrideId = todayState.routineId;
 
             // 3. Determine Today's Routine ID
             let todaysRoutineId: string | number | null = null;
             if (todayOverrideId) {
                 todaysRoutineId = todayOverrideId;
-            } else {
+            } else if (!todayState.isRest) {
                 const todayDayName = DAYS[now.getDay()];
                 const defaultRoutine = allRoutines.find(r => r.days.includes(todayDayName));
                 if (defaultRoutine) todaysRoutineId = defaultRoutine.id;
