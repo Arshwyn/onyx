@@ -877,4 +877,17 @@ describe('DailyView database-backed rest days', () => {
     expect(setDailyOverride).not.toHaveBeenCalled();
     expect(setDailyRest).not.toHaveBeenCalled();
   });
+
+  it('drops a legacy key with a malformed date suffix and still migrates a valid one', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false, readFailed: false });
+    localStorage.setItem('onyx_rest_not-a-date', 'true');
+    localStorage.setItem('onyx_rest_2026-01-05', 'true');
+
+    render(<DailyView />);
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalledWith('2026-01-05'));
+    expect(localStorage.getItem('onyx_rest_not-a-date')).toBeNull();
+    expect(getDailyOverrideState).not.toHaveBeenCalledWith('not-a-date');
+    expect(setDailyRest).not.toHaveBeenCalledWith('not-a-date');
+  });
 });
