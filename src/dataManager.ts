@@ -684,6 +684,8 @@ const dailyOverrideCacheKey = (date: string) => `onyx_daily_override_cache_${dat
 export interface DailyOverrideState {
     routineId: Id | null;
     isRest: boolean;
+    // True when the online read failed (value may come from the local cache).
+    readFailed: boolean;
 }
 
 export const getDailyOverrideState = async (date: string): Promise<DailyOverrideState> => {
@@ -699,14 +701,15 @@ export const getDailyOverrideState = async (date: string): Promise<DailyOverride
         console.error('Error fetching override:', error);
         // Entries cached before rest markers existed have no isRest field.
         const cached = readCache<{ value: Id | null; isRest?: boolean }>(dailyOverrideCacheKey(date));
-        if (cached) return { routineId: cached.value ?? null, isRest: cached.isRest === true };
+        if (cached) return { routineId: cached.value ?? null, isRest: cached.isRest === true, readFailed: true };
         emitError('Could not load routine override.');
-        return { routineId: null, isRest: false };
+        return { routineId: null, isRest: false, readFailed: true };
     }
 
     const state: DailyOverrideState = {
         routineId: data?.routine_id || null,
         isRest: data?.is_rest === true,
+        readFailed: false,
     };
     writeCache(dailyOverrideCacheKey(date), { value: state.routineId, isRest: state.isRest });
     return state;

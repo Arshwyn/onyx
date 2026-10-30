@@ -537,17 +537,17 @@ describe('daily override rest markers', () => {
     mockSupabase.from.mockReturnValueOnce(offline());
     await removeDailyOverride('2026-01-01');
     mockSupabase.from.mockReturnValueOnce(offline());
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: false });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: false, readFailed: true });
 
     mockSupabase.from.mockReturnValueOnce(offline());
     await setDailyRest('2026-01-01');
     mockSupabase.from.mockReturnValueOnce(offline());
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true, readFailed: true });
 
     mockSupabase.from.mockReturnValueOnce(offline());
     await setDailyOverride('2026-01-01', 'r2');
     mockSupabase.from.mockReturnValueOnce(offline());
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r2', isRest: false });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r2', isRest: false, readFailed: true });
   });
 
   it('does not touch the cache when a write is rejected by the server', async () => {
@@ -556,14 +556,14 @@ describe('daily override rest markers', () => {
     mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'x' }, status: 400 }));
     await removeDailyOverride('2026-01-01');
     mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true, readFailed: true });
   });
 
   it('reads is_rest and keeps getDailyOverride returning the routine id', async () => {
     const builder = makeBuilder({ data: { routine_id: null, is_rest: true }, error: null });
     mockSupabase.from.mockReturnValue(builder);
 
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true, readFailed: false });
     expect(builder.select).toHaveBeenCalledWith('routine_id, is_rest');
     expect(await getDailyOverride('2026-01-01')).toBeNull();
   });
@@ -573,15 +573,26 @@ describe('daily override rest markers', () => {
     await getDailyOverrideState('2026-01-01');
 
     mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true, readFailed: true });
     expect(emitError).not.toHaveBeenCalled();
+  });
+
+  it('flags a failed read with no cache and emits an error', async () => {
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
+    expect(await getDailyOverrideState('2026-01-02')).toEqual({ routineId: null, isRest: false, readFailed: true });
+    expect(emitError).toHaveBeenCalledWith('Could not load routine override.');
+  });
+
+  it('does not flag a successful read', async () => {
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: { routine_id: 'r1', is_rest: false }, error: null }));
+    expect((await getDailyOverrideState('2026-01-03')).readFailed).toBe(false);
   });
 
   it('reads an old cache entry without isRest as not rest', async () => {
     localStorage.setItem('onyx_daily_override_cache_2026-01-01', JSON.stringify({ value: 'r1' }));
     mockSupabase.from.mockReturnValue(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
 
-    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r1', isRest: false });
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r1', isRest: false, readFailed: true });
   });
 });
 
