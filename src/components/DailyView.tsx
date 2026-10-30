@@ -4,7 +4,7 @@ import {
   getRoutines, getExercises, addLog, updateLog, deleteLog, getExerciseStats,
   getDailyViewBundle, getCardioLogsByDate, getLastSessionSets,
   addBodyWeight,
-  getCardioLogs, addCardioLog, deleteCardioLog,
+  addCardioLog, deleteCardioLog,
   getCircumferencesByDate, addCircumference, deleteCircumference,
   getDailyOverrideState, setDailyOverride, setDailyRest, removeDailyOverride
 } from '../dataManager';
@@ -100,7 +100,6 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
   // Stats
   const [lastPerformances, setLastPerformances] = useState<Record<string | number, PerformanceStat>>({});
   const [personalRecords, setPersonalRecords] = useState<Record<string | number, number>>({});
-  const [lastSessionData, setLastSessionData] = useState<Record<string | number, PerformanceStat>>({});
 
   // Progression suggestions
   const [suggestions, setSuggestions] = useState<Record<string | number, Suggestion>>({});
@@ -321,7 +320,6 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
 
             setLastPerformances(newLastPerf);
             setPersonalRecords(newPRs);
-            setLastSessionData(lastSessionMap);
             setSuggestions(newSuggestions);
             setExercises(mergedData);
 

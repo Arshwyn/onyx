@@ -151,10 +151,9 @@ export default function TrendsView() {
     // getBodyWeights()/getCircumferences() throw on failure (see
     // dataManager.ts) — unlike before #23, so this now needs a catch.
     try {
-      const [bData, allEx, logs, mData] = await Promise.all([
+      const [bData, allEx, mData] = await Promise.all([
         getBodyWeights(),
         getExercises(),
-        getLogs(),
         getCircumferences()
       ]);
 
