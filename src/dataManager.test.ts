@@ -32,6 +32,7 @@ import {
   getDailyOverrideState,
   setDailyOverride,
   setDailyRest,
+  removeDailyOverride,
   getDailyViewBundle,
   flushWriteQueue,
 } from './dataManager';
@@ -526,6 +527,36 @@ describe('daily override rest markers', () => {
     mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'x', code: '23514' }, status: 400 }));
     expect(await setDailyRest('2026-01-01')).toBe(false);
     expect(emitError).toHaveBeenCalledWith('Could not save rest day.');
+  });
+
+  it('updates the cached state on an offline-queued write so the fallback read matches', async () => {
+    const offline = () => makeBuilder({ data: null, error: { message: 'Failed to fetch' }, status: 0 });
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: { routine_id: null, is_rest: true }, error: null }));
+    await getDailyOverrideState('2026-01-01');
+
+    mockSupabase.from.mockReturnValueOnce(offline());
+    await removeDailyOverride('2026-01-01');
+    mockSupabase.from.mockReturnValueOnce(offline());
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: false });
+
+    mockSupabase.from.mockReturnValueOnce(offline());
+    await setDailyRest('2026-01-01');
+    mockSupabase.from.mockReturnValueOnce(offline());
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+
+    mockSupabase.from.mockReturnValueOnce(offline());
+    await setDailyOverride('2026-01-01', 'r2');
+    mockSupabase.from.mockReturnValueOnce(offline());
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r2', isRest: false });
+  });
+
+  it('does not touch the cache when a write is rejected by the server', async () => {
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: { routine_id: null, is_rest: true }, error: null }));
+    await getDailyOverrideState('2026-01-01');
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'x' }, status: 400 }));
+    await removeDailyOverride('2026-01-01');
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
   });
 
   it('reads is_rest and keeps getDailyOverride returning the routine id', async () => {
