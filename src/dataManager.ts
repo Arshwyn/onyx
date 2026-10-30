@@ -718,15 +718,21 @@ export const getDailyOverride = async (date: string): Promise<Id | null> => {
 
 export const setDailyOverride = async (date: string, routineId: Id) => {
     const userId = await getUser();
-    await performWrite('setDailyOverride', [date, routineId, userId], 'Could not save routine override.');
+    const { accepted } = await performWriteTracked('setDailyOverride', [date, routineId, userId], 'Could not save routine override.');
+    // Keep the offline read fallback in step with an applied or queued write.
+    if (accepted) writeCache(dailyOverrideCacheKey(date), { value: routineId, isRest: false });
 };
 
 export const setDailyRest = async (date: string): Promise<boolean> => {
     const userId = await getUser();
-    return (await performWriteTracked('setDailyRest', [date, userId], 'Could not save rest day.')).accepted;
+    const { accepted } = await performWriteTracked('setDailyRest', [date, userId], 'Could not save rest day.');
+    if (accepted) writeCache(dailyOverrideCacheKey(date), { value: null, isRest: true });
+    return accepted;
 };
 
 export const removeDailyOverride = async (date: string): Promise<boolean> => {
     const userId = await getUser();
-    return (await performWriteTracked('removeDailyOverride', [date, userId], 'Could not remove routine override.')).accepted;
+    const { accepted } = await performWriteTracked('removeDailyOverride', [date, userId], 'Could not remove routine override.');
+    if (accepted) writeCache(dailyOverrideCacheKey(date), { value: null, isRest: false });
+    return accepted;
 };
