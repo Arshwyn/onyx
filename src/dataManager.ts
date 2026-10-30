@@ -179,21 +179,27 @@ const runHandler = async (type: WriteType, args: unknown[]): Promise<WriteRespon
     }
 };
 
-const performWrite = async (type: WriteType, args: unknown[], errorMessage: string): Promise<unknown> => {
+// Like performWrite, but also reports whether the write was accepted
+// (applied, or queued for replay) so callers can revert optimistic UI.
+const performWriteTracked = async (type: WriteType, args: unknown[], errorMessage: string): Promise<{ data: unknown; accepted: boolean }> => {
     const { data, error, status } = await runHandler(type, args);
 
     if (error) {
         if (isNetworkError(status)) {
             await enqueueWrite(type, args);
             emitInfo('Saved offline — will sync automatically when back online.');
-            return null;
+            return { data: null, accepted: true };
         }
         console.error(error);
         emitError(errorMessage);
+        return { data, accepted: false };
     }
 
-    return data;
+    return { data, accepted: true };
 };
+
+const performWrite = async (type: WriteType, args: unknown[], errorMessage: string): Promise<unknown> =>
+    (await performWriteTracked(type, args, errorMessage)).data;
 
 // Replays queued writes in the order they were made. Stops at the first
 // entry that still fails for network reasons (preserves order, retried on
@@ -715,12 +721,12 @@ export const setDailyOverride = async (date: string, routineId: Id) => {
     await performWrite('setDailyOverride', [date, routineId, userId], 'Could not save routine override.');
 };
 
-export const setDailyRest = async (date: string) => {
+export const setDailyRest = async (date: string): Promise<boolean> => {
     const userId = await getUser();
-    await performWrite('setDailyRest', [date, userId], 'Could not save rest day.');
+    return (await performWriteTracked('setDailyRest', [date, userId], 'Could not save rest day.')).accepted;
 };
 
-export const removeDailyOverride = async (date: string) => {
+export const removeDailyOverride = async (date: string): Promise<boolean> => {
     const userId = await getUser();
-    await performWrite('removeDailyOverride', [date, userId], 'Could not remove routine override.');
+    return (await performWriteTracked('removeDailyOverride', [date, userId], 'Could not remove routine override.')).accepted;
 };
