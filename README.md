@@ -95,6 +95,9 @@ grant execute on function public.get_exercise_stats(text[], date) to authenticat
 -- Keep anon away from tables, now and in the future
 revoke all on all tables in schema public from anon;
 alter default privileges in schema public revoke all on tables from anon;
+-- Default privileges apply only to tables created by the role that runs the
+-- statement. Run it once for each role that creates tables (for example
+-- `postgres` and `supabase_admin`), using `for role <role>` or by connecting as it.
 ```
 
 #### How to verify
@@ -115,9 +118,16 @@ where proname = 'get_exercise_stats'
   and pronamespace = 'public'::regnamespace;
 
 -- anon has no table privileges (expect zero rows)
-select table_name, privilege_type
-from information_schema.role_table_grants
-where grantee = 'anon' and table_schema = 'public';
+-- (has_table_privilege sees all grants regardless of the current role,
+-- unlike information_schema.role_table_grants)
+select t.relname, p.privilege
+from pg_class t
+cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) as p(privilege)
+where t.relnamespace = 'public'::regnamespace
+  and t.relname in ('body_weights', 'cardio_logs', 'circumferences', 'custom_exercises',
+                    'daily_overrides', 'global_exercises', 'routines', 'user_settings',
+                    'workout_logs')
+  and has_table_privilege('anon', t.oid, p.privilege);
 ```
 
 ### Environment
