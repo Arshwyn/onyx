@@ -216,7 +216,7 @@ export default function WorkoutLogger() {
       clearTimeout(liftFlashTimer.current);
       setShowLiftSavedMsg(true);
       liftFlashTimer.current = setTimeout(() => setShowLiftSavedMsg(false), 2200);
-    } catch (err) { openConfirm("Error", "Could not save workout. Please try again.", null, true); } finally { setIsSubmitting(false); }
+    } catch { openConfirm("Error", "Could not save workout. Please try again.", null, true); } finally { setIsSubmitting(false); }
   };
 
   const saveCardio = async () => {
@@ -230,7 +230,7 @@ export default function WorkoutLogger() {
       clearTimeout(cardioFlashTimer.current);
       setShowCardioSavedMsg(true);
       cardioFlashTimer.current = setTimeout(() => setShowCardioSavedMsg(false), 2200);
-    } catch (err) { openConfirm("Error", "Could not save cardio. Please try again.", null, true); } finally { setIsSubmitting(false); }
+    } catch { openConfirm("Error", "Could not save cardio. Please try again.", null, true); } finally { setIsSubmitting(false); }
   };
 
   const maxSetWeight = Math.max(0, ...sets.map(s => parseFloat(String(s.weight)) || 0));
