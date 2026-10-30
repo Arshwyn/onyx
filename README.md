@@ -32,9 +32,9 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 
 ### Supabase setup
 
-This repo does not ship SQL for the database; you create the schema in your own Supabase project. The app expects:
+This repo does not ship the base schema; you create it in your own Supabase project. Schema changes made after that initial setup ship as timestamped SQL files in `supabase/migrations/`, and each one must be applied to your Supabase project (SQL editor or `supabase db push`) before you deploy the app version that needs it. The app expects:
 
-1. **Tables**: `global_exercises`, `custom_exercises`, `routines`, `workout_logs`, `cardio_logs`, `body_weights`, `circumferences`, `user_settings`, `daily_overrides`. Column names and types are defined by how `src/dataManager.ts` reads and writes them.
+1. **Tables**: `global_exercises`, `custom_exercises`, `routines`, `workout_logs`, `cardio_logs`, `body_weights`, `circumferences`, `user_settings`, `daily_overrides`. Column names and types are defined by how `src/dataManager.ts` reads and writes them. `daily_overrides` holds per-date overrides: either a routine override (`is_rest = false`, `routine_id` set) or a rest-day marker (`is_rest = true`, `routine_id` null), enforced by a check constraint. `is_rest` and the nullable `routine_id` come from `supabase/migrations/202610300000_daily_overrides_is_rest.sql`. It is a pre-deploy requirement: apply it before deploying this version of the app.
 2. **Row Level Security (RLS)** enabled on all 9 tables. The anon key is shipped in the frontend bundle, so it is safe to expose only because RLS is enabled on every table.
    - User-owned tables use owner-scoped policies for the `authenticated` role: `auth.uid() = user_id`, set as both `USING` and `WITH CHECK`.
    - `global_exercises` is shared, read-only reference data: give it a `SELECT` policy only.
