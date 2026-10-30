@@ -152,7 +152,10 @@ const writeHandlers = {
         supabase.from('user_settings').upsert({ user_id: userId, ...settings }),
 
     setDailyOverride: ([date, routineId, userId]: [string, Id, string | undefined]) =>
-        supabase.from('daily_overrides').upsert({ user_id: userId, date, routine_id: routineId }),
+        supabase.from('daily_overrides').upsert({ user_id: userId, date, routine_id: routineId, is_rest: false }),
+
+    setDailyRest: ([date, userId]: [string, string | undefined]) =>
+        supabase.from('daily_overrides').upsert({ user_id: userId, date, routine_id: null, is_rest: true }),
 
     removeDailyOverride: ([date, userId]: [string, string | undefined]) =>
         supabase.from('daily_overrides').delete().eq('user_id', userId).eq('date', date),
@@ -672,31 +675,49 @@ export const getRecentCardioLogs = async (limit = 50): Promise<CardioLog[]> => {
 // couldn't tell "nothing cached yet" apart from "cached, and it was null".
 const dailyOverrideCacheKey = (date: string) => `onyx_daily_override_cache_${date}`;
 
-export const getDailyOverride = async (date: string): Promise<Id | null> => {
+export interface DailyOverrideState {
+    routineId: Id | null;
+    isRest: boolean;
+}
+
+export const getDailyOverrideState = async (date: string): Promise<DailyOverrideState> => {
     const userId = await getUser();
     const { data, error } = await supabase
         .from('daily_overrides')
-        .select('routine_id')
+        .select('routine_id, is_rest')
         .eq('user_id', userId)
         .eq('date', date)
         .maybeSingle();
 
     if (error) {
         console.error('Error fetching override:', error);
-        const cached = readCache<{ value: Id | null }>(dailyOverrideCacheKey(date));
-        if (cached) return cached.value;
+        // Entries cached before rest markers existed have no isRest field.
+        const cached = readCache<{ value: Id | null; isRest?: boolean }>(dailyOverrideCacheKey(date));
+        if (cached) return { routineId: cached.value ?? null, isRest: cached.isRest === true };
         emitError('Could not load routine override.');
-        return null;
+        return { routineId: null, isRest: false };
     }
 
-    const routineId = data?.routine_id || null;
-    writeCache(dailyOverrideCacheKey(date), { value: routineId });
-    return routineId;
+    const state: DailyOverrideState = {
+        routineId: data?.routine_id || null,
+        isRest: data?.is_rest === true,
+    };
+    writeCache(dailyOverrideCacheKey(date), { value: state.routineId, isRest: state.isRest });
+    return state;
+};
+
+export const getDailyOverride = async (date: string): Promise<Id | null> => {
+    return (await getDailyOverrideState(date)).routineId;
 };
 
 export const setDailyOverride = async (date: string, routineId: Id) => {
     const userId = await getUser();
     await performWrite('setDailyOverride', [date, routineId, userId], 'Could not save routine override.');
+};
+
+export const setDailyRest = async (date: string) => {
+    const userId = await getUser();
+    await performWrite('setDailyRest', [date, userId], 'Could not save rest day.');
 };
 
 export const removeDailyOverride = async (date: string) => {
