@@ -519,6 +519,15 @@ describe('daily override rest markers', () => {
     expect(emitError).not.toHaveBeenCalled();
   });
 
+  it('reports whether a rest write was accepted', async () => {
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: null }));
+    expect(await setDailyRest('2026-01-01')).toBe(true);
+
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'x', code: '23514' }, status: 400 }));
+    expect(await setDailyRest('2026-01-01')).toBe(false);
+    expect(emitError).toHaveBeenCalledWith('Could not save rest day.');
+  });
+
   it('reads is_rest and keeps getDailyOverride returning the routine id', async () => {
     const builder = makeBuilder({ data: { routine_id: null, is_rest: true }, error: null });
     mockSupabase.from.mockReturnValue(builder);
