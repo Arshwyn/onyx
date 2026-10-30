@@ -29,6 +29,9 @@ import {
   getLastSessionSets,
   getRoutines,
   getDailyOverride,
+  getDailyOverrideState,
+  setDailyOverride,
+  setDailyRest,
   getDailyViewBundle,
   flushWriteQueue,
 } from './dataManager';
@@ -484,6 +487,61 @@ describe('getDailyOverride', () => {
 
     expect(result).toBeNull();
     expect(emitError).toHaveBeenCalledWith('Could not load routine override.');
+  });
+});
+
+describe('daily override rest markers', () => {
+  it('writes is_rest: false with a routine override', async () => {
+    const builder = makeBuilder({ data: null, error: null });
+    mockSupabase.from.mockReturnValue(builder);
+
+    await setDailyOverride('2026-01-01', 'r1');
+
+    expect(mockSupabase.from).toHaveBeenCalledWith('daily_overrides');
+    expect(builder.upsert).toHaveBeenCalledWith({ user_id: 'user-1', date: '2026-01-01', routine_id: 'r1', is_rest: false });
+  });
+
+  it('writes routine_id: null and is_rest: true for a rest marker', async () => {
+    const builder = makeBuilder({ data: null, error: null });
+    mockSupabase.from.mockReturnValue(builder);
+
+    await setDailyRest('2026-01-01');
+
+    expect(builder.upsert).toHaveBeenCalledWith({ user_id: 'user-1', date: '2026-01-01', routine_id: null, is_rest: true });
+  });
+
+  it('queues a rest write when the network is unreachable', async () => {
+    mockSupabase.from.mockReturnValue(makeBuilder({ data: null, error: { message: 'Failed to fetch' }, status: 0 }));
+
+    await setDailyRest('2026-01-01');
+
+    expect(enqueueWrite).toHaveBeenCalledWith('setDailyRest', ['2026-01-01', 'user-1']);
+    expect(emitError).not.toHaveBeenCalled();
+  });
+
+  it('reads is_rest and keeps getDailyOverride returning the routine id', async () => {
+    const builder = makeBuilder({ data: { routine_id: null, is_rest: true }, error: null });
+    mockSupabase.from.mockReturnValue(builder);
+
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(builder.select).toHaveBeenCalledWith('routine_id, is_rest');
+    expect(await getDailyOverride('2026-01-01')).toBeNull();
+  });
+
+  it('falls back to the cached rest state when the fetch fails', async () => {
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: { routine_id: null, is_rest: true }, error: null }));
+    await getDailyOverrideState('2026-01-01');
+
+    mockSupabase.from.mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: null, isRest: true });
+    expect(emitError).not.toHaveBeenCalled();
+  });
+
+  it('reads an old cache entry without isRest as not rest', async () => {
+    localStorage.setItem('onyx_daily_override_cache_2026-01-01', JSON.stringify({ value: 'r1' }));
+    mockSupabase.from.mockReturnValue(makeBuilder({ data: null, error: { message: 'boom' }, status: 0 }));
+
+    expect(await getDailyOverrideState('2026-01-01')).toEqual({ routineId: 'r1', isRest: false });
   });
 });
 
