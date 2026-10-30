@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   getRoutines, getExercises, addLog, updateLog, deleteLog, getExerciseStats,
@@ -120,47 +120,10 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
   const [isAdHocRest, setIsAdHocRest] = useState(false);
   const [isSwapped, setIsSwapped] = useState(false);
 
+  const latest = useRef<{ loadDailyView: (d: Date, showLoading?: boolean) => Promise<void>; viewDate: Date }>({ loadDailyView: async () => {}, viewDate });
+
   const BODY_PARTS = ['Navel', 'Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-  useEffect(() => {
-    const now = new Date();
-    const dateStr = getDateStr(now);
-    setTodayDateStr(dateStr);
-
-    // Move any legacy localStorage rest flags into the database first so the
-    // initial load reflects them.
-    migrateLegacyRestFlags().finally(() => loadDailyView(viewDate));
-
-    const loadSettings = () => {
-        const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
-        setWeightUnit(w.toLowerCase());
-        const m = localStorage.getItem('onyx_unit_measure') || 'in';
-        setMeasureUnit(m.toLowerCase());
-        setShowBW(localStorage.getItem('onyx_show_bw') !== 'false');
-        setShowMeas(localStorage.getItem('onyx_show_meas') !== 'false');
-    };
-    loadSettings();
-    window.addEventListener('storage', loadSettings);
-
-    const handleSyncComplete = () => {
-        console.log("DailyView: Sync complete, reloading data...");
-        loadDailyView(viewDate, false); 
-    };
-    window.addEventListener('onyx-sync-complete', handleSyncComplete);
-
-    return () => {
-        window.removeEventListener('storage', loadSettings);
-        window.removeEventListener('onyx-sync-complete', handleSyncComplete);
-    };
-  }, [viewDate]); 
-
-  useEffect(() => {
-      if (refreshTrigger) {
-          console.log("DailyView: Background refresh triggered.");
-          loadDailyView(viewDate, false); 
-      }
-  }, [refreshTrigger]);
 
   const openConfirm = (title: string, message: string, onConfirm: (() => void) | null = null, isDestructive = false) => { setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive }); };
   const openCalculator = (weightVal: string | number) => { setCalcInitWeight(weightVal); setShowCalc(true); };
@@ -369,6 +332,52 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
         if (showLoading) setLoading(false);
     }
   };
+
+  // Effects below call the newest loadDailyView/viewDate through this ref, so
+  // they keep their own trigger-only dependency lists (viewDate for the
+  // mount/date-change effect, refreshTrigger for the refresh effect).
+  useEffect(() => {
+    latest.current = { loadDailyView, viewDate };
+  });
+
+  useEffect(() => {
+    const now = new Date();
+    const dateStr = getDateStr(now);
+    setTodayDateStr(dateStr);
+
+    // Move any legacy localStorage rest flags into the database first so the
+    // initial load reflects them.
+    migrateLegacyRestFlags().finally(() => latest.current.loadDailyView(viewDate));
+
+    const loadSettings = () => {
+        const w = localStorage.getItem('onyx_unit_weight') || 'lbs';
+        setWeightUnit(w.toLowerCase());
+        const m = localStorage.getItem('onyx_unit_measure') || 'in';
+        setMeasureUnit(m.toLowerCase());
+        setShowBW(localStorage.getItem('onyx_show_bw') !== 'false');
+        setShowMeas(localStorage.getItem('onyx_show_meas') !== 'false');
+    };
+    loadSettings();
+    window.addEventListener('storage', loadSettings);
+
+    const handleSyncComplete = () => {
+        console.log("DailyView: Sync complete, reloading data...");
+        latest.current.loadDailyView(viewDate, false); 
+    };
+    window.addEventListener('onyx-sync-complete', handleSyncComplete);
+
+    return () => {
+        window.removeEventListener('storage', loadSettings);
+        window.removeEventListener('onyx-sync-complete', handleSyncComplete);
+    };
+  }, [viewDate]); 
+
+  useEffect(() => {
+      if (refreshTrigger) {
+          console.log("DailyView: Background refresh triggered.");
+          latest.current.loadDailyView(latest.current.viewDate, false);
+      }
+  }, [refreshTrigger]);
 
   const changeDay = (offset: number) => {
     const newDate = new Date(viewDate); 
