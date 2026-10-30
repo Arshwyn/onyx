@@ -4,7 +4,7 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 
 ## Features
 
-- **Routines** — define per-day-of-week routines (exercises + cardio), with the option to override or mark any specific date as a rest day
+- **Routines** — define per-day-of-week routines (exercises + cardio), with the option to override or mark any specific date as a rest day (marking a rest day replaces a routine override on that date; un-resting returns to the scheduled routine, and the earlier override is not restored)
 - **Workout logging** — log sets/reps/weight against exercises (a merged list of global defaults and your own custom exercises), with a built-in plate calculator and rest timer
 - **Cardio logging** — track type, duration, and distance
 - **Body tracking** — body weight and circumference measurements (including navel) over time
