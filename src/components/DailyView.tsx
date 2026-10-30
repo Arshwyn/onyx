@@ -184,6 +184,8 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
         }
         for (const date of dates) {
             const state = await getDailyOverrideState(date);
+            // An unknown state could hide a real override: keep the key and retry later.
+            if (state.readFailed) continue;
             if (state.routineId || state.isRest) {
                 localStorage.removeItem(`${prefix}${date}`);
                 continue;
@@ -399,6 +401,8 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
                 getRoutines(),
                 getDailyOverrideState(todayStr)
             ]);
+            // Unknown state for today: abort rather than write over a real override.
+            if (todayState.readFailed) throw new Error('Could not read today\'s override');
             const todayOverrideId = todayState.routineId;
 
             // 3. Determine Today's Routine ID
