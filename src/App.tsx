@@ -36,7 +36,7 @@ export default function App() {
 
   // Explicit "Resuming" state to control the global loader
   const [isResuming, setIsResuming] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(Date.now());
+  const [refreshKey, setRefreshKey] = useState(() => Date.now());
 
   // NEW: Trigger to force SettingsView to reset to hub
   const [settingsResetTrigger, setSettingsResetTrigger] = useState(0);
@@ -68,6 +68,66 @@ export default function App() {
     window.addEventListener('storage', checkTimerSetting);
     return () => window.removeEventListener('storage', checkTimerSetting);
   }, []);
+
+  const syncSettings = async () => {
+    try {
+      const dbSettings = await getUserSettings();
+      if (dbSettings) {
+        localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
+        localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
+        localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
+        localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
+
+        const timerVisible = dbSettings.show_timer !== false;
+        localStorage.setItem('onyx_show_timer', String(timerVisible));
+
+        const confettiEnabled = dbSettings.show_confetti !== false;
+        localStorage.setItem('onyx_show_confetti', String(confettiEnabled));
+
+        const showBW = dbSettings.show_body_weight !== false;
+        const showMeas = dbSettings.show_measurements !== false;
+        localStorage.setItem('onyx_show_bw', String(showBW));
+        localStorage.setItem('onyx_show_meas', String(showMeas));
+
+        // Progression suggestions default OFF, unlike every toggle above.
+        const progressionEnabled = dbSettings.progression_enabled === true;
+        localStorage.setItem('onyx_progression_enabled', String(progressionEnabled));
+
+        const defaultStep = dbSettings.weight_unit === 'kg' ? 2.5 : 5;
+        localStorage.setItem('onyx_progression_step', String(dbSettings.progression_step ?? defaultStep));
+
+        const defaultBar = dbSettings.weight_unit === 'kg' ? 20 : 45;
+        localStorage.setItem('onyx_default_bar_weight', String(dbSettings.default_bar_weight ?? defaultBar));
+
+        // Only mirror an actual override -- an unset column means "use the
+        // built-in default," which getMechanicRepDefaults() already falls
+        // back to when there's no localStorage key at all, so writing
+        // nothing here (rather than the default itself) keeps that distinct
+        // from a user having explicitly saved the same values.
+        if (dbSettings.mechanic_rep_defaults) {
+          localStorage.setItem('onyx_mechanic_rep_defaults', JSON.stringify(dbSettings.mechanic_rep_defaults));
+        }
+
+        window.dispatchEvent(new Event('storage'));
+      } else {
+        await updateUserSettings({
+          weight_unit: 'lbs',
+          measure_unit: 'in',
+          distance_unit: 'mi',
+          timer_increments: [30, 60, 90],
+          show_timer: true,
+          show_confetti: true,
+          show_body_weight: true,
+          show_measurements: true,
+          progression_enabled: false,
+          progression_step: 5,
+          default_bar_weight: 45
+        });
+      }
+    } catch (e) {
+      console.warn("Background settings sync failed (connection might be recovering)", e);
+    }
+  };
 
   // 3. Auth & Connection Management
   useEffect(() => {
@@ -156,66 +216,6 @@ export default function App() {
       window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
-
-  const syncSettings = async () => {
-    try {
-      const dbSettings = await getUserSettings();
-      if (dbSettings) {
-        localStorage.setItem('onyx_unit_weight', dbSettings.weight_unit);
-        localStorage.setItem('onyx_unit_measure', dbSettings.measure_unit);
-        localStorage.setItem('onyx_unit_distance', dbSettings.distance_unit || 'mi');
-        localStorage.setItem('onyx_timer_incs', JSON.stringify(dbSettings.timer_increments));
-
-        const timerVisible = dbSettings.show_timer !== false;
-        localStorage.setItem('onyx_show_timer', String(timerVisible));
-
-        const confettiEnabled = dbSettings.show_confetti !== false;
-        localStorage.setItem('onyx_show_confetti', String(confettiEnabled));
-
-        const showBW = dbSettings.show_body_weight !== false;
-        const showMeas = dbSettings.show_measurements !== false;
-        localStorage.setItem('onyx_show_bw', String(showBW));
-        localStorage.setItem('onyx_show_meas', String(showMeas));
-
-        // Progression suggestions default OFF, unlike every toggle above.
-        const progressionEnabled = dbSettings.progression_enabled === true;
-        localStorage.setItem('onyx_progression_enabled', String(progressionEnabled));
-
-        const defaultStep = dbSettings.weight_unit === 'kg' ? 2.5 : 5;
-        localStorage.setItem('onyx_progression_step', String(dbSettings.progression_step ?? defaultStep));
-
-        const defaultBar = dbSettings.weight_unit === 'kg' ? 20 : 45;
-        localStorage.setItem('onyx_default_bar_weight', String(dbSettings.default_bar_weight ?? defaultBar));
-
-        // Only mirror an actual override -- an unset column means "use the
-        // built-in default," which getMechanicRepDefaults() already falls
-        // back to when there's no localStorage key at all, so writing
-        // nothing here (rather than the default itself) keeps that distinct
-        // from a user having explicitly saved the same values.
-        if (dbSettings.mechanic_rep_defaults) {
-          localStorage.setItem('onyx_mechanic_rep_defaults', JSON.stringify(dbSettings.mechanic_rep_defaults));
-        }
-
-        window.dispatchEvent(new Event('storage'));
-      } else {
-        await updateUserSettings({
-          weight_unit: 'lbs',
-          measure_unit: 'in',
-          distance_unit: 'mi',
-          timer_increments: [30, 60, 90],
-          show_timer: true,
-          show_confetti: true,
-          show_body_weight: true,
-          show_measurements: true,
-          progression_enabled: false,
-          progression_step: 5,
-          default_bar_weight: 45
-        });
-      }
-    } catch (e) {
-      console.warn("Background settings sync failed (connection might be recovering)", e);
-    }
-  };
 
   // NEW: Logic to handle clicking the Settings tab
   const handleSettingsClick = () => {
