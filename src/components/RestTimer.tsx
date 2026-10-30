@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function RestTimer() {
   const [seconds, setSeconds] = useState(0);
@@ -6,7 +6,6 @@ export default function RestTimer() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [increments, setIncrements] = useState([30, 60, 90]);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load settings on mount and listen for changes
   useEffect(() => {
@@ -18,23 +17,6 @@ export default function RestTimer() {
     window.addEventListener('storage', loadSettings);
     return () => window.removeEventListener('storage', loadSettings);
   }, []);
-
-  // Timer Logic
-  useEffect(() => {
-    if (isActive && seconds > 0) {
-      intervalRef.current = setInterval(() => {
-        setSeconds((prev) => prev - 1);
-      }, 1000);
-    } else if (seconds === 0 && isActive) {
-      playBeep();
-      setIsActive(false);
-      clearInterval(intervalRef.current ?? undefined);
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-    } else {
-      clearInterval(intervalRef.current ?? undefined);
-    }
-    return () => clearInterval(intervalRef.current ?? undefined);
-  }, [isActive, seconds]);
 
   const playBeep = () => {
     const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -50,13 +32,31 @@ export default function RestTimer() {
     setTimeout(() => osc.stop(), 500);
   };
 
+  // Timer Logic. The effect re-runs every second (seconds is a dependency), so
+  // the tick closure always sees the current value; finishing is handled in the
+  // tick itself rather than by a follow-up effect that sets state.
+  useEffect(() => {
+    if (!isActive || seconds <= 0) return;
+    const id = setInterval(() => {
+      if (seconds <= 1) {
+        setSeconds(0);
+        setIsActive(false);
+        playBeep();
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      } else {
+        setSeconds(seconds - 1);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isActive, seconds]);
+
   const addTime = (secs: number) => {
     setSeconds(prev => prev + secs);
     if (!isActive) setIsActive(true);
     setIsExpanded(true);
   };
 
-  const toggleTimer = () => { setIsActive(!isActive); };
+  const toggleTimer = () => { if (seconds > 0) setIsActive(!isActive); };
   const resetTimer = () => { setIsActive(false); setSeconds(0); setIsExpanded(false); };
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);

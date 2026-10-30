@@ -71,19 +71,7 @@ export default function RoutineManager({ onBack }: RoutineManagerProps) {
   // dispatches after a save so this reflects a change without a remount.
   const [mechanicDefaults, setMechanicDefaults] = useState(getMechanicRepDefaults());
 
-  useEffect(() => {
-    loadData();
-    const loadDefaults = () => setMechanicDefaults(getMechanicRepDefaults());
-    window.addEventListener('storage', loadDefaults);
-    return () => window.removeEventListener('storage', loadDefaults);
-  }, []);
-
-  const openConfirm = (title: string, message: string, onConfirm: (() => void) | null = null, isDestructive = false) => {
-    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
-  };
-
-  const loadData = async () => {
-    setLoading(true);
+  const fetchData = async () => {
     const [loadedExercises, loadedRoutines] = await Promise.all([
         getExercises(),
         getRoutines()
@@ -91,6 +79,22 @@ export default function RoutineManager({ onBack }: RoutineManagerProps) {
     setAllExercises(loadedExercises);
     setRoutines(loadedRoutines);
     setLoading(false);
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    await fetchData();
+  };
+
+  useEffect(() => {
+    fetchData();
+    const loadDefaults = () => setMechanicDefaults(getMechanicRepDefaults());
+    window.addEventListener('storage', loadDefaults);
+    return () => window.removeEventListener('storage', loadDefaults);
+  }, []);
+
+  const openConfirm = (title: string, message: string, onConfirm: (() => void) | null = null, isDestructive = false) => {
+    setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
   };
 
   const trimmedQuery = exerciseQuery.trim();
