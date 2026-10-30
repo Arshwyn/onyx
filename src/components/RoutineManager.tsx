@@ -71,7 +71,8 @@ export default function RoutineManager({ onBack }: RoutineManagerProps) {
   // dispatches after a save so this reflects a change without a remount.
   const [mechanicDefaults, setMechanicDefaults] = useState(getMechanicRepDefaults());
 
-  const fetchData = async () => {
+  const loadData = async () => {
+    setLoading(true);
     const [loadedExercises, loadedRoutines] = await Promise.all([
         getExercises(),
         getRoutines()
@@ -81,13 +82,13 @@ export default function RoutineManager({ onBack }: RoutineManagerProps) {
     setLoading(false);
   };
 
-  const loadData = async () => {
-    setLoading(true);
-    await fetchData();
-  };
-
   useEffect(() => {
-    fetchData();
+    // Initial load: `loading` already starts true, so no synchronous state write here.
+    Promise.all([getExercises(), getRoutines()]).then(([loadedExercises, loadedRoutines]) => {
+      setAllExercises(loadedExercises);
+      setRoutines(loadedRoutines);
+      setLoading(false);
+    });
     const loadDefaults = () => setMechanicDefaults(getMechanicRepDefaults());
     window.addEventListener('storage', loadDefaults);
     return () => window.removeEventListener('storage', loadDefaults);

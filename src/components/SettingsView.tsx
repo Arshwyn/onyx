@@ -59,22 +59,52 @@ function formatMemberSince(iso: string | null): string {
   return `Member since ${d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
 }
 
+const readStr = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
+const readFlag = (key: string) => localStorage.getItem(key) !== 'false';
+
+function readTimerIncs(): number[] {
+  const saved = localStorage.getItem('onyx_timer_incs');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length === 3) return parsed;
+    } catch (e) {
+      console.error("Error parsing timer settings", e);
+    }
+  }
+  return [30, 60, 90];
+}
+
+function readProgressionStep(): number {
+  const saved = parseFloat(localStorage.getItem('onyx_progression_step') || '');
+  if (!isNaN(saved)) return saved;
+  return readStr('onyx_unit_weight', 'lbs') === 'kg' ? 2.5 : 5;
+}
+
+// Mirrors the `user_settings.default_bar_weight` column, same as every other
+// pref -- App.tsx's syncSettings() writes this key on load/change.
+function readDefaultBarWeight(): number | null {
+  const saved = parseFloat(localStorage.getItem('onyx_default_bar_weight') || '');
+  return !isNaN(saved) ? saved : null;
+}
+
 export default function SettingsView({ resetTrigger }: SettingsViewProps) {
   const [profile, setProfile] = useState<Profile>({ email: '', name: '', memberSince: null });
 
-  const [weightUnit, setWeightUnit] = useState('lbs');
-  const [measureUnit, setMeasureUnit] = useState('in');
-  const [distUnit, setDistUnit] = useState('mi');
-  const [timerIncs, setTimerIncs] = useState([30, 60, 90]);
-  const [defaultBarWeight, setDefaultBarWeight] = useState<number | null>(null);
+  const [weightUnit, setWeightUnit] = useState(() => readStr('onyx_unit_weight', 'lbs'));
+  const [measureUnit, setMeasureUnit] = useState(() => readStr('onyx_unit_measure', 'in'));
+  const [distUnit, setDistUnit] = useState(() => readStr('onyx_unit_distance', 'mi'));
+  const [timerIncs, setTimerIncs] = useState<number[]>(readTimerIncs);
+  const [defaultBarWeight, setDefaultBarWeight] = useState<number | null>(readDefaultBarWeight);
 
-  const [showTimer, setShowTimer] = useState(true);
-  const [showConfetti, setShowConfetti] = useState(true);
-  const [showBW, setShowBW] = useState(true);
-  const [showMeas, setShowMeas] = useState(true);
+  const [showTimer, setShowTimer] = useState(() => readFlag('onyx_show_timer'));
+  const [showConfetti, setShowConfetti] = useState(() => readFlag('onyx_show_confetti'));
+  const [showBW, setShowBW] = useState(() => readFlag('onyx_show_bw'));
+  const [showMeas, setShowMeas] = useState(() => readFlag('onyx_show_meas'));
 
-  const [progressionEnabled, setProgressionEnabled] = useState(false);
-  const [progressionStep, setProgressionStep] = useState(5);
+  // Default-off, unlike every toggle above.
+  const [progressionEnabled, setProgressionEnabled] = useState(() => localStorage.getItem('onyx_progression_enabled') === 'true');
+  const [progressionStep, setProgressionStep] = useState(readProgressionStep);
 
   const [mechanicDefaults, setMechanicDefaults] = useState<MechanicRepDefaults>(getMechanicRepDefaults());
 
@@ -93,7 +123,11 @@ export default function SettingsView({ resetTrigger }: SettingsViewProps) {
   // Progression Suggestions toggle).
   const [progressionSettingsOpen, setProgressionSettingsOpen] = useState(false);
 
-  useEffect(() => {
+  // A new resetTrigger collapses every sheet back to the hub. Adjusted while
+  // rendering (not in an effect); only the scroll side effect needs an effect.
+  const [seenResetTrigger, setSeenResetTrigger] = useState(resetTrigger);
+  if (seenResetTrigger !== resetTrigger) {
+    setSeenResetTrigger(resetTrigger);
     if (resetTrigger > 0) {
       setProfileOpen(false);
       setCustomExOpen(false);
@@ -102,43 +136,14 @@ export default function SettingsView({ resetTrigger }: SettingsViewProps) {
       setBarWeightOpen(false);
       setTimerIncsOpen(false);
       setProgressionSettingsOpen(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  useEffect(() => {
+    if (resetTrigger > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [resetTrigger]);
 
   useEffect(() => {
-    const savedWeightUnit = localStorage.getItem('onyx_unit_weight') || 'lbs';
-    setWeightUnit(savedWeightUnit);
-    setMeasureUnit(localStorage.getItem('onyx_unit_measure') || 'in');
-    setDistUnit(localStorage.getItem('onyx_unit_distance') || 'mi');
-
-    setShowTimer(localStorage.getItem('onyx_show_timer') !== 'false');
-    setShowConfetti(localStorage.getItem('onyx_show_confetti') !== 'false');
-    setShowBW(localStorage.getItem('onyx_show_bw') !== 'false');
-    setShowMeas(localStorage.getItem('onyx_show_meas') !== 'false');
-
-    // Default-off, unlike every toggle above.
-    setProgressionEnabled(localStorage.getItem('onyx_progression_enabled') === 'true');
-    const savedStep = parseFloat(localStorage.getItem('onyx_progression_step') || '');
-    setProgressionStep(!isNaN(savedStep) ? savedStep : (savedWeightUnit === 'kg' ? 2.5 : 5));
-
-    const savedTimer = localStorage.getItem('onyx_timer_incs');
-    if (savedTimer) {
-      try {
-        const parsed = JSON.parse(savedTimer);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setTimerIncs(parsed);
-        }
-      } catch (e) {
-        console.error("Error parsing timer settings", e);
-      }
-    }
-
-    // Mirrors the `user_settings.default_bar_weight` column, same as every other
-    // pref above -- App.tsx's syncSettings() writes this key on load/change.
-    const savedBar = parseFloat(localStorage.getItem('onyx_default_bar_weight') || '');
-    setDefaultBarWeight(!isNaN(savedBar) ? savedBar : null);
-
     // name lives in user_settings.name (nullable -- falls back to email when
     // unset, see getInitials/the profile display below), not Supabase Auth
     // metadata -- it's just another per-user field alongside every other
@@ -695,7 +700,13 @@ function CustomExercisesSheet({ onClose }: { onClose: () => void }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    // `loading` already starts true, so the initial load writes no state synchronously.
+    getExercises().then((data) => {
+      setExercises(data);
+      setLoading(false);
+    });
+  }, []);
 
   const handleAdd = async () => {
     if (!newName) return;
