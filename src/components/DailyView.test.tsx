@@ -116,7 +116,7 @@ beforeEach(() => {
   getExercises.mockResolvedValue(EXERCISES);
   // Override bypasses day-of-week matching so the test doesn't depend on
   // which day "today" actually is when the suite runs.
-  getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false });
+  getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false, readFailed: false });
   setDailyRest.mockResolvedValue(true);
   removeDailyOverride.mockResolvedValue(true);
   setDailyOverride.mockResolvedValue(undefined);
@@ -758,7 +758,7 @@ describe('DailyView database-backed rest days', () => {
   });
 
   it('shows Rest Day when the database marks the date as rest', async () => {
-    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true });
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true, readFailed: false });
 
     render(<DailyView />);
 
@@ -789,7 +789,7 @@ describe('DailyView database-backed rest days', () => {
   });
 
   it('clears the marker with removeDailyOverride on "No, I want to workout"', async () => {
-    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true });
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true, readFailed: false });
     render(<DailyView />);
 
     fireEvent.click(await screen.findByText('No, I want to workout'));
@@ -800,14 +800,14 @@ describe('DailyView database-backed rest days', () => {
   it('forces rest on the target date with setDailyRest when swapping with an empty today', async () => {
     // Viewing another day that has a routine; today has no routine.
     getRoutines.mockResolvedValue([{ ...ROUTINE, days: [] }]);
-    getDailyOverrideState.mockImplementation(async () => ({ routineId: 'r1', isRest: false }));
+    getDailyOverrideState.mockImplementation(async () => ({ routineId: 'r1', isRest: false, readFailed: false }));
     render(<DailyView />);
     await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText('Next day'));
     // Today's state: no override, no routine scheduled.
     getDailyOverrideState.mockImplementation(async (d: string) => (
-      d === new Date().toLocaleDateString('en-CA') ? { routineId: null, isRest: false } : { routineId: 'r1', isRest: false }
+      d === new Date().toLocaleDateString('en-CA') ? { routineId: null, isRest: false, readFailed: false } : { routineId: 'r1', isRest: false, readFailed: false }
     ));
     fireEvent.click(await screen.findByText('Do This Today'));
     fireEvent.click(await screen.findByText('Confirm'));
@@ -817,7 +817,7 @@ describe('DailyView database-backed rest days', () => {
   });
 
   it('migrates a legacy localStorage rest flag to the database and removes the key', async () => {
-    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false });
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false, readFailed: false });
     localStorage.setItem('onyx_rest_2026-01-05', 'true');
 
     render(<DailyView />);
@@ -827,7 +827,7 @@ describe('DailyView database-backed rest days', () => {
   });
 
   it('keeps the database row and drops the legacy key when the date already has an override', async () => {
-    getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false });
+    getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false, readFailed: false });
     localStorage.setItem('onyx_rest_2026-01-05', 'true');
 
     render(<DailyView />);
@@ -837,7 +837,7 @@ describe('DailyView database-backed rest days', () => {
   });
 
   it('keeps the legacy key when the rest write is not accepted', async () => {
-    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false });
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false, readFailed: false });
     setDailyRest.mockResolvedValue(false);
     localStorage.setItem('onyx_rest_2026-01-05', 'true');
 
