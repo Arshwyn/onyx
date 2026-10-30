@@ -78,11 +78,6 @@ export default function HistoryView() {
     };
   }, []);
 
-  // Reload data whenever filters change
-  useEffect(() => {
-    loadData();
-  }, [filterStart, filterEnd]);
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -114,6 +109,16 @@ export default function HistoryView() {
         setLoading(false);
     }
   };
+
+  // Reload data whenever filters change. The ref hands the effect the newest
+  // loadData (which reads the current filters) without listing it as a dependency.
+  const loadDataRef = useRef(loadData);
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  });
+  useEffect(() => {
+    loadDataRef.current();
+  }, [filterStart, filterEnd]);
 
   const isSameItem = (a: HistoryItem, b: HistoryItem) => a.dataType === b.dataType && a.id === b.id;
 

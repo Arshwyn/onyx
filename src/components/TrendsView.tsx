@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   getBodyWeights, deleteBodyWeight,
   getLogs, getExercises,
@@ -105,7 +105,6 @@ export default function TrendsView() {
 
   // --- STATE: MEASUREMENTS ---
   const [measurementData, setMeasurementData] = useState<Circumference[]>([]);
-  const [filteredMeasurements, setFilteredMeasurements] = useState<(Circumference & { weight: string | number })[]>([]);
   const [bodyPart, setBodyPart] = useState('Navel');
 
   const BODY_PARTS = ['Navel', 'Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
@@ -135,10 +134,7 @@ export default function TrendsView() {
     if (mode === 'exercises' && selectedExId) {
       calculateExerciseTrend(selectedExId);
     }
-    if (mode === 'measurements') {
-      filterMeasurements(bodyPart);
-    }
-  }, [mode, selectedExId, bodyPart, measurementData]);
+  }, [mode, selectedExId]);
 
   const openConfirm = (title: string, message: string, onConfirm: (() => void) | null = null, isDestructive = false) => {
     setModalConfig({ isOpen: true, title, message, onConfirm, isDestructive });
@@ -190,13 +186,12 @@ export default function TrendsView() {
     setExerciseData(points);
   };
 
-  const filterMeasurements = (part: string) => {
-    const filtered: (Circumference & { weight: string | number })[] = measurementData
-      .filter(m => m.body_part === part)
+  const filteredMeasurements = useMemo<(Circumference & { weight: string | number })[]>(() => (
+    measurementData
+      .filter(m => m.body_part === bodyPart)
       .map(m => ({ ...m, weight: m.measurement }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    setFilteredMeasurements(filtered);
-  };
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  ), [measurementData, bodyPart]);
 
   // getBodyWeights()/getCircumferences() throw on failure (see #23 and
   // dataManager.ts) rather than swallowing, so a failed refetch — offline
