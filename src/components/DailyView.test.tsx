@@ -8,7 +8,8 @@ import {
   getCardioLogsByDate as _getCardioLogsByDate,
   addCardioLog as _addCardioLog, deleteCardioLog as _deleteCardioLog,
   getCircumferencesByDate as _getCircumferencesByDate, addCircumference as _addCircumference,
-  deleteCircumference as _deleteCircumference, getDailyOverride as _getDailyOverride,
+  deleteCircumference as _deleteCircumference, getDailyOverrideState as _getDailyOverrideState,
+  setDailyRest as _setDailyRest, removeDailyOverride as _removeDailyOverride, setDailyOverride as _setDailyOverride,
   getLastSessionSets as _getLastSessionSets,
 } from '../dataManager';
 
@@ -27,7 +28,10 @@ const deleteCardioLog = vi.mocked(_deleteCardioLog);
 const getCircumferencesByDate = vi.mocked(_getCircumferencesByDate);
 const addCircumference = vi.mocked(_addCircumference);
 const deleteCircumference = vi.mocked(_deleteCircumference);
-const getDailyOverride = vi.mocked(_getDailyOverride);
+const getDailyOverrideState = vi.mocked(_getDailyOverrideState);
+const setDailyRest = vi.mocked(_setDailyRest);
+const removeDailyOverride = vi.mocked(_removeDailyOverride);
+const setDailyOverride = vi.mocked(_setDailyOverride);
 const getLastSessionSets = vi.mocked(_getLastSessionSets);
 
 // DailyView drives everything off dataManager, so the component is exercised
@@ -54,7 +58,8 @@ vi.mock('../dataManager', () => ({
   getCircumferencesByDate: vi.fn(),
   addCircumference: vi.fn(),
   deleteCircumference: vi.fn(),
-  getDailyOverride: vi.fn(),
+  getDailyOverrideState: vi.fn(),
+  setDailyRest: vi.fn(),
   setDailyOverride: vi.fn(),
   removeDailyOverride: vi.fn(),
   getLastSessionSets: vi.fn(),
@@ -111,7 +116,10 @@ beforeEach(() => {
   getExercises.mockResolvedValue(EXERCISES);
   // Override bypasses day-of-week matching so the test doesn't depend on
   // which day "today" actually is when the suite runs.
-  getDailyOverride.mockResolvedValue('r1');
+  getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false });
+  setDailyRest.mockResolvedValue(true);
+  removeDailyOverride.mockResolvedValue(true);
+  setDailyOverride.mockResolvedValue(true);
   getDailyViewBundle.mockResolvedValue(emptyBundle);
   getLastSessionSets.mockResolvedValue({});
 });
@@ -741,5 +749,101 @@ describe('DailyView set editing (add/remove)', () => {
     fireEvent.click(await screen.findByText('Cancel'));
 
     expect(within(benchCard).getAllByText('✕').length).toBe(initialCount);
+  });
+});
+
+describe('DailyView database-backed rest days', () => {
+  beforeEach(() => {
+    getExerciseStats.mockResolvedValue([]);
+  });
+
+  it('shows Rest Day when the database marks the date as rest', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true });
+
+    render(<DailyView />);
+
+    expect(await screen.findByText('Rest Day')).toBeInTheDocument();
+  });
+
+  it('writes the rest marker through setDailyRest, not localStorage, when Rest is tapped', async () => {
+    render(<DailyView />);
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Rest'));
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalledTimes(1));
+    expect(setDailyRest).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(await screen.findByText('Rest Day')).toBeInTheDocument();
+    expect(Object.keys(localStorage).some((k) => k.startsWith('onyx_rest_'))).toBe(false);
+  });
+
+  it('reverts the optimistic rest state when the write is not accepted', async () => {
+    setDailyRest.mockResolvedValue(false);
+    render(<DailyView />);
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Rest'));
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText('Rest Day')).not.toBeInTheDocument());
+  });
+
+  it('clears the marker with removeDailyOverride on "No, I want to workout"', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: true });
+    render(<DailyView />);
+
+    fireEvent.click(await screen.findByText('No, I want to workout'));
+
+    await waitFor(() => expect(removeDailyOverride).toHaveBeenCalledTimes(1));
+  });
+
+  it('forces rest on the target date with setDailyRest when swapping with an empty today', async () => {
+    // Viewing another day that has a routine; today has no routine.
+    getRoutines.mockResolvedValue([{ ...ROUTINE, days: [] }]);
+    getDailyOverrideState.mockImplementation(async () => ({ routineId: 'r1', isRest: false }));
+    render(<DailyView />);
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Next day'));
+    // Today's state: no override, no routine scheduled.
+    getDailyOverrideState.mockImplementation(async (d: string) => (
+      d === new Date().toLocaleDateString('en-CA') ? { routineId: null, isRest: false } : { routineId: 'r1', isRest: false }
+    ));
+    fireEvent.click(await screen.findByText('Do This Today'));
+    fireEvent.click(await screen.findByText('Confirm'));
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalledTimes(1));
+    expect(setDailyOverride).toHaveBeenCalledTimes(1);
+  });
+
+  it('migrates a legacy localStorage rest flag to the database and removes the key', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false });
+    localStorage.setItem('onyx_rest_2026-01-05', 'true');
+
+    render(<DailyView />);
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalledWith('2026-01-05'));
+    await waitFor(() => expect(localStorage.getItem('onyx_rest_2026-01-05')).toBeNull());
+  });
+
+  it('keeps the database row and drops the legacy key when the date already has an override', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false });
+    localStorage.setItem('onyx_rest_2026-01-05', 'true');
+
+    render(<DailyView />);
+
+    await waitFor(() => expect(localStorage.getItem('onyx_rest_2026-01-05')).toBeNull());
+    expect(setDailyRest).not.toHaveBeenCalled();
+  });
+
+  it('keeps the legacy key when the rest write is not accepted', async () => {
+    getDailyOverrideState.mockResolvedValue({ routineId: null, isRest: false });
+    setDailyRest.mockResolvedValue(false);
+    localStorage.setItem('onyx_rest_2026-01-05', 'true');
+
+    render(<DailyView />);
+
+    await waitFor(() => expect(setDailyRest).toHaveBeenCalled());
+    expect(localStorage.getItem('onyx_rest_2026-01-05')).toBe('true');
   });
 });

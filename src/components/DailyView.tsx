@@ -417,17 +417,14 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
             // 5. Execute Swap
             // Step A: Set Today to use the Target Routine
             await setDailyOverride(todayStr, targetRoutineId);
-            localStorage.removeItem(`onyx_rest_${todayStr}`); 
 
             // Step B: Handle the Target Date
             if (todaysRoutineId) {
                 // If Today had a routine (even a planned rest routine), move it to Target Date
                 await setDailyOverride(targetDateStr, todaysRoutineId);
-                localStorage.removeItem(`onyx_rest_${targetDateStr}`); 
             } else {
-                // If Today was empty (no routine), clear Target Date override and FORCE REST
-                await removeDailyOverride(targetDateStr);
-                localStorage.setItem(`onyx_rest_${targetDateStr}`, 'true');
+                // If Today was empty (no routine), FORCE REST on the Target Date
+                await setDailyRest(targetDateStr);
             }
             
             // Legacy Cleanup
@@ -452,8 +449,7 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
     try {
         await setDailyOverride(dateStr, routineId);
         
-        // Clear rest state if it was active
-        localStorage.removeItem(`onyx_rest_${dateStr}`);
+        // The routine upsert replaces any rest marker on this date.
         setIsAdHocRest(false);
         
         // Remove legacy swaps if any
@@ -477,7 +473,18 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
     }, true); 
   };
 
-  const handleToggleAdHocRest = () => { const dateStr = getDateStr(viewDate); const newState = !isAdHocRest; setIsAdHocRest(newState); if (newState) { localStorage.setItem(`onyx_rest_${dateStr}`, 'true'); } else { localStorage.removeItem(`onyx_rest_${dateStr}`); } };
+  const handleToggleAdHocRest = async () => {
+    const dateStr = getDateStr(viewDate);
+    const newState = !isAdHocRest;
+    setIsAdHocRest(newState);
+    const accepted = newState ? await setDailyRest(dateStr) : await removeDailyOverride(dateStr);
+    if (!accepted) {
+        // The data layer already showed its error toast; undo the optimistic state.
+        setIsAdHocRest(!newState);
+        return;
+    }
+    if (!newState) loadDailyView(viewDate);
+  };
 
   const handleSaveWeight = async () => { if (!weightInput) return; const dateStr = getDateStr(viewDate); await addBodyWeight(weightInput, dateStr); setViewWeight(weightInput); };
   // The refetch below can fail even though the write itself succeeded — see
