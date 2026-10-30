@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import BottomSheet from './ui/BottomSheet';
 import Pill from './ui/Pill';
 import MicroLabel from './ui/MicroLabel';
@@ -33,11 +33,15 @@ export default function PlateCalculator({ isOpen, onClose, initialWeight, unit =
   // manual weight entry in the spec, only the bar-weight chips below. Seeded from
   // Settings' "Default Bar Weight" when it's a valid option for the current unit,
   // otherwise falls back to the first chip like before that setting existed.
-  useEffect(() => {
-    if (!isOpen) return;
-    const saved = parseFloat(localStorage.getItem('onyx_default_bar_weight') || '');
-    setBarWeight(barOptions.includes(saved) ? saved : barOptions[0]);
-  }, [isOpen, unit]);
+  // Re-seeded while rendering (not in an effect) whenever the sheet opens or the unit changes.
+  const [seededFor, setSeededFor] = useState({ isOpen: false, unit });
+  if (seededFor.isOpen !== isOpen || seededFor.unit !== unit) {
+    setSeededFor({ isOpen, unit });
+    if (isOpen) {
+      const saved = parseFloat(localStorage.getItem('onyx_default_bar_weight') || '');
+      setBarWeight(barOptions.includes(saved) ? saved : barOptions[0]);
+    }
+  }
 
   const targetWeight = parseFloat(String(initialWeight)) || 0;
   const belowBar = targetWeight < barWeight;
