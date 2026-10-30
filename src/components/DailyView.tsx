@@ -176,12 +176,18 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
         if (!navigator.onLine) return;
         const prefix = 'onyx_rest_';
         const dates: string[] = [];
+        const invalidKeys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith(prefix) && localStorage.getItem(key) === 'true') {
-                dates.push(key.slice(prefix.length));
+            if (!key || !key.startsWith(prefix)) continue;
+            const suffix = key.slice(prefix.length);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(suffix)) {
+                invalidKeys.push(key);
+            } else if (localStorage.getItem(key) === 'true') {
+                dates.push(suffix);
             }
         }
+        invalidKeys.forEach((key) => localStorage.removeItem(key));
         for (const date of dates) {
             const state = await getDailyOverrideState(date);
             // An unknown state could hide a real override: keep the key and retry later.
