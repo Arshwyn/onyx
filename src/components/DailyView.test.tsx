@@ -119,7 +119,7 @@ beforeEach(() => {
   getDailyOverrideState.mockResolvedValue({ routineId: 'r1', isRest: false });
   setDailyRest.mockResolvedValue(true);
   removeDailyOverride.mockResolvedValue(true);
-  setDailyOverride.mockResolvedValue(true);
+  setDailyOverride.mockResolvedValue(undefined);
   getDailyViewBundle.mockResolvedValue(emptyBundle);
   getLastSessionSets.mockResolvedValue({});
 });
