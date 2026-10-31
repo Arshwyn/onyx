@@ -169,6 +169,12 @@ PORT=8080 docker compose up -d
 
 After changing a `VITE_*` value, rebuild with `docker compose up -d --build`. `nginx.conf` handles SPA routing so client-side navigation works behind nginx.
 
+The built image is tagged `onyx:latest` by default. Set the optional `IMAGE_TAG` (in `.env` or inline) to tag it differently, for example with the short commit SHA:
+
+```bash
+IMAGE_TAG=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
 ### Pinned base images
 
 The `Dockerfile` pins both base images to exact version tags (Node and nginx, each on a specific Alpine release) for reproducible builds. To bump a pin, choose a new exact tag that exists on the registry, update the matching `FROM` line, rebuild with `docker compose build`, and re-verify that the container serves `index.html` and the `/assets/` files before deploying.
