@@ -178,12 +178,26 @@ The runtime is hardened:
 - All Linux capabilities are dropped (`cap_drop: [ALL]`) and `no-new-privileges` is set.
 - `GET /healthz` returns `200` and backs the image `HEALTHCHECK`.
 - The listener is IPv4 only: the official nginx entrypoint's IPv6 auto-listen step cannot edit config on a read-only filesystem.
+- Every response carries security headers (see [Response headers](#response-headers)).
 
 The built image is tagged `onyx:latest` by default. Set the optional `IMAGE_TAG` (in `.env` or inline) to tag it differently, for example with the short commit SHA:
 
 ```bash
 IMAGE_TAG=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
+
+### Response headers
+
+`nginx-security-headers.conf` is included by every location in `nginx.conf` and every header uses `always`, so 404s and the health probe carry them too:
+
+- `Strict-Transport-Security: max-age=15552000` (180 days). There is deliberately no `includeSubDomains` (this origin does not control sibling hostnames) and no `preload` (hard to undo); raise the max-age only after a clean period.
+- `Content-Security-Policy` (enforcing): `default-src 'self'`, `script-src 'self'` (no inline script, no `eval`), Google Fonts allowed for styles and fonts, `worker-src 'self' blob:` (the confetti worker), `object-src 'none'`, `frame-ancestors 'none'`.
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`.
+- `Permissions-Policy` denying accelerometer, camera, geolocation, gyroscope, magnetometer, microphone, payment and USB.
+
+The Supabase origin in `connect-src` (and its `wss://` form) is not stored in the repo: the Dockerfile renders it into the snippet at build time from the `VITE_SUPABASE_URL` build arg, keeping only scheme, host and port. The build fails if the value is unset or is not a plain `http(s)://host[:port]` URL.
+
+When the app needs a new external origin, add it to `nginx-security-headers.conf`. Any new `location` in `nginx.conf` must include `/etc/nginx/security-headers.conf` itself, because `add_header` in a location replaces the headers inherited from the server level. Cache headers are not part of the snippet.
 
 ### Pinned base images
 
