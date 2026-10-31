@@ -26,7 +26,7 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 
 ### Prerequisites
 
-- Node.js 26.13.0 (npm is bundled with it); this matches the Node version of the Docker build image (`node:26.13.0-alpine3.24`)
+- Node.js 26 (npm is bundled with it); the Docker build image uses a Node 26.x tag, see the `Dockerfile` for the exact version
 - A [Supabase](https://supabase.com) project (see "Supabase setup" below)
 - Docker with Compose (only for the self-hosted deployment)
 
