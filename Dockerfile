@@ -1,5 +1,5 @@
 # --- Build stage ---
-FROM node:lts-alpine AS builder
+FROM node:26.13.0-alpine3.24 AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # --- Runtime stage ---
-FROM nginx:alpine
+FROM nginx:1.31.8-alpine3.24
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

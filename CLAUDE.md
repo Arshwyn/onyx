@@ -43,7 +43,7 @@ Copy `.env.example` to a local `.env` (gitignored) and fill these in for `npm ru
 
 ### Docker
 
-`docker compose up` builds a two-stage image (`node:lts-alpine` build → `nginx:alpine` runtime) and serves the static build on port `${PORT:-3010}`. `nginx.conf` does SPA fallback routing (`try_files ... /index.html`) — any new client-side routes must keep working through that catch-all. `nginx.conf` also sets `Cache-Control: immutable` for Vite's content-hashed `/assets/` files and `Cache-Control: no-cache` for `index.html`/`sw.js`/`manifest.webmanifest`/`workbox-*.js` — the no-cache set must stay in sync with whatever `vite-plugin-pwa` emits at the build root, since a cached stale `sw.js` would prevent the PWA's auto-update from ever seeing a new deploy.
+`docker compose up` builds a two-stage image (`node:26.13.0-alpine3.24` build → `nginx:1.31.8-alpine3.24` runtime, both pinned to exact versions) and serves the static build on port `${PORT:-3010}`. `nginx.conf` does SPA fallback routing (`try_files ... /index.html`) — any new client-side routes must keep working through that catch-all. `nginx.conf` also sets `Cache-Control: immutable` for Vite's content-hashed `/assets/` files and `Cache-Control: no-cache` for `index.html`/`sw.js`/`manifest.webmanifest`/`workbox-*.js` — the no-cache set must stay in sync with whatever `vite-plugin-pwa` emits at the build root, since a cached stale `sw.js` would prevent the PWA's auto-update from ever seeing a new deploy.
 
 ### Progressive Web App
 
