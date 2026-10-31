@@ -179,6 +179,8 @@ IMAGE_TAG=$(git rev-parse --short HEAD) docker compose up -d --build
 
 The `Dockerfile` pins both base images to exact version tags (Node and nginx, each on a specific Alpine release) for reproducible builds. To bump a pin, choose a new exact tag that exists on the registry, update the matching `FROM` line, rebuild with `docker compose build`, and re-verify that the container serves `index.html` and the `/assets/` files before deploying.
 
+The runtime stage also runs `apk upgrade` for `brotli-libs`, `curl` and `libcurl` at build time, so the image picks up Alpine package fixes while the base tags stay pinned. To verify, run `apk info -v brotli-libs curl libcurl` inside the built image (for example `docker run --rm --entrypoint apk onyx:latest info -v brotli-libs curl libcurl`).
+
 ## Claude Code / MCP tooling (optional)
 
 You do not need this to run or develop the app. The repo includes a read-only Supabase MCP server config (`.mcp.json`) for use with Claude Code, so the assistant can inspect your project's schema and data. To use it:
