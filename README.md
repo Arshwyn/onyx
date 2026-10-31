@@ -169,6 +169,16 @@ PORT=8080 docker compose up -d
 
 After changing a `VITE_*` value, rebuild with `docker compose up -d --build`. `nginx.conf` handles SPA routing so client-side navigation works behind nginx.
 
+The container listens on port `8080` internally; the host port (`PORT`, default `3010`) is mapped to it, so the host-facing port is unchanged. Rebuild the image after pulling these changes (`docker compose up -d --build`).
+
+The runtime is hardened:
+
+- nginx runs as the unprivileged `nginx` user (uid/gid 101), not root.
+- The root filesystem is read-only (`read_only: true`); `/tmp` is a tmpfs and holds the pid file and nginx temp paths.
+- All Linux capabilities are dropped (`cap_drop: [ALL]`) and `no-new-privileges` is set.
+- `GET /healthz` returns `200` and backs the image `HEALTHCHECK`.
+- The listener is IPv4 only: the official nginx entrypoint's IPv6 auto-listen step cannot edit config on a read-only filesystem.
+
 The built image is tagged `onyx:latest` by default. Set the optional `IMAGE_TAG` (in `.env` or inline) to tag it differently, for example with the short commit SHA:
 
 ```bash
