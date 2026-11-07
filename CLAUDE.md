@@ -120,7 +120,7 @@ Weight (`lbs`/`kg`), body measurements (`in`/`cm`), and distance (`mi`/`km`) uni
 
 ### Styling
 
-Tailwind CSS (dark theme, `bg-black`/`text-white` base in `App.tsx`) with no custom design tokens in `tailwind.config.js` — utility classes are used directly and consistently across components rather than extracted into shared style constants.
+Tailwind CSS (dark theme, `bg-black`/`text-white` base in `App.tsx`) with custom design tokens (colors, fonts, radii, shadows) defined in `tailwind.config.js` and shared primitives in `src/components/ui/`; see `docs/DESIGN.md` for the palette, typography and component patterns as built.
 
 ## Claude Code tooling
 
