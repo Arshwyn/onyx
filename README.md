@@ -22,6 +22,8 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 - canvas-confetti for the completion celebration
 - `vite-plugin-pwa` for the installable app shell (manifest + service worker)
 
+The visual design (palette, type, components) is documented in [docs/DESIGN.md](docs/DESIGN.md).
+
 ## Getting started
 
 ### Prerequisites
