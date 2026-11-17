@@ -110,6 +110,8 @@ export default function TrendsView() {
   const BODY_PARTS = ['Navel', 'Waist', 'Chest', 'Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh', 'Calves', 'Neck', 'Shoulders', 'Hips'];
 
   useEffect(() => {
+    // Intentional: initial fetch; the loader is declared below as a const arrow.
+    // eslint-disable-next-line react-hooks/immutability
     loadAllData();
 
     const loadSettings = () => {
@@ -132,6 +134,7 @@ export default function TrendsView() {
 
   useEffect(() => {
     if (mode === 'exercises' && selectedExId) {
+      // eslint-disable-next-line react-hooks/immutability
       calculateExerciseTrend(selectedExId);
     }
   }, [mode, selectedExId]);
