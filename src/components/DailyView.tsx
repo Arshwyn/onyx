@@ -343,6 +343,8 @@ export default function DailyView({ refreshTrigger }: DailyViewProps) {
   useEffect(() => {
     const now = new Date();
     const dateStr = getDateStr(now);
+    // Intentional: the mount/date-change effect refreshes the stored "today" string.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTodayDateStr(dateStr);
 
     // Move any legacy localStorage rest flags into the database first so the
