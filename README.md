@@ -28,7 +28,7 @@ The visual design (palette, type, components) is documented in [docs/DESIGN.md](
 
 ### Prerequisites
 
-- Node.js 26 (npm is bundled with it); the Docker build image uses a Node 26.x tag, see the `Dockerfile` for the exact version
+- Node.js 22 or newer (declared in `engines`; npm is bundled with it); the Docker build image uses a Node 26.x tag, see the `Dockerfile` for the exact version
 - A [Supabase](https://supabase.com) project (see "Supabase setup" below)
 - Docker with Compose (only for the self-hosted deployment)
 
