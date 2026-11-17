@@ -15,9 +15,9 @@ Onyx is a self-hosted workout tracker: log lifts and cardio against routines, tr
 
 ## Tech stack
 
-- React 19 + Vite 7, written in TypeScript
+- React 19 + Vite 8, written in TypeScript
 - `react-router-dom` for client-side routing
-- Tailwind CSS
+- Tailwind CSS 3
 - Supabase (`@supabase/supabase-js`) for auth, database, and realtime
 - canvas-confetti for the completion celebration
 - `vite-plugin-pwa` for the installable app shell (manifest + service worker)
